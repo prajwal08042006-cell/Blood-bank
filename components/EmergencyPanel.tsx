@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
-import { ShieldAlert, Droplets, MapPin, Users, Send, CheckCircle, ArrowRight, Star, Loader2 } from 'lucide-react';
-import { BloodGroup, DonorMatch } from '../types';
+import React, { useState } from 'react';
+import { ShieldAlert, Droplets, MapPin, Users, Send, CheckCircle, ArrowRight, Star, Loader2, X, Phone, Mail, Droplet } from 'lucide-react';
+import { BloodGroup, DonorMatch, UserProfile } from '../types';
 import { getAiDonorMatching } from '../services/geminiService';
 import { useAuth } from '../App';
 import { getAvailableDonors, createEmergencyRequest } from '../services/firestoreService';
@@ -14,6 +14,7 @@ const EmergencyPanel: React.FC = () => {
   const [isMatching, setIsMatching] = useState(false);
   const [matches, setMatches] = useState<DonorMatch[]>([]);
   const [hospitalName, setHospitalName] = useState('');
+  const [selectedDonor, setSelectedDonor] = useState<{ donor: UserProfile; match: DonorMatch } | null>(null);
 
   const bloodGroups: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
@@ -172,7 +173,10 @@ const EmergencyPanel: React.FC = () => {
                     <div className="px-3 py-1 bg-rose-50 text-rose-600 text-xs font-bold rounded-full border border-rose-100">
                       Match Score: {match.score}%
                     </div>
-                    <button className="text-rose-600 font-bold text-sm hover:underline flex items-center gap-1">
+                    <button 
+                      onClick={() => setSelectedDonor({ donor: match.donor, match })}
+                      className="text-rose-600 font-bold text-sm hover:underline flex items-center gap-1"
+                    >
                       Details <ArrowRight size={14} />
                     </button>
                   </div>
@@ -187,6 +191,94 @@ const EmergencyPanel: React.FC = () => {
           >
             New Request
           </button>
+        </div>
+      )}
+
+      {/* ========== DONOR DETAILS MODAL ========== */}
+      {selectedDonor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedDonor(null)}>
+          <div 
+            className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl p-8 animate-in fade-in zoom-in-95 duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close */}
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black text-slate-800">Donor Details</h3>
+              <button 
+                onClick={() => setSelectedDonor(null)} 
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Avatar & Name */}
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 font-black text-3xl mx-auto mb-3">
+                {selectedDonor.donor.name.charAt(0)}
+              </div>
+              <h4 className="text-2xl font-black text-slate-800">{selectedDonor.donor.name}</h4>
+              <div className="flex items-center justify-center gap-2 mt-1">
+                <span className="bg-rose-100 text-rose-600 text-xs font-black px-3 py-1 rounded-full">
+                  {selectedDonor.donor.bloodGroup}
+                </span>
+                <span className="bg-yellow-100 text-yellow-700 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1">
+                  <Star size={10} fill="currentColor" /> Impact: {selectedDonor.donor.impactScore}
+                </span>
+              </div>
+            </div>
+
+            {/* Contact Info */}
+            <div className="space-y-3 mb-6">
+              <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                <div className="bg-blue-500 text-white p-2.5 rounded-xl">
+                  <Phone size={18} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Phone Number</p>
+                  <p className="text-blue-800 font-bold text-lg">
+                    {selectedDonor.donor.phone || 'Not provided'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <div className="bg-slate-500 text-white p-2.5 rounded-xl">
+                  <Mail size={18} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email</p>
+                  <p className="text-slate-800 font-bold">
+                    {selectedDonor.donor.email || 'Not provided'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                <div className="bg-emerald-500 text-white p-2.5 rounded-xl">
+                  <Droplet size={18} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Match Info</p>
+                  <p className="text-emerald-800 font-bold">
+                    {selectedDonor.match.distanceKm.toFixed(1)} km away • Score: {selectedDonor.match.score}%
+                  </p>
+                  <p className="text-emerald-600 text-xs mt-0.5">{selectedDonor.match.reason}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Call Button */}
+            {selectedDonor.donor.phone && (
+              <a
+                href={`tel:${selectedDonor.donor.phone}`}
+                className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200 active:scale-[0.98]"
+              >
+                <Phone size={16} /> Call Donor Now
+              </a>
+            )}
+          </div>
         </div>
       )}
     </div>

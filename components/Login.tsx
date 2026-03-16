@@ -24,6 +24,7 @@ const Login: React.FC = () => {
   // Registration fields
   const [regName, setRegName] = useState('');
   const [regBloodGroup, setRegBloodGroup] = useState<BloodGroup>('O+');
+  const [regPhone, setRegPhone] = useState('');
 
   const clearError = () => setError('');
 
@@ -64,7 +65,7 @@ const Login: React.FC = () => {
 
       await createUserProfile(fbUser.uid, {
         name: regName.trim(),
-        phone: '',
+        phone: regPhone.trim(),
         email: email,
         bloodGroup: regBloodGroup,
         role: role,
@@ -279,6 +280,22 @@ const Login: React.FC = () => {
                 />
               </div>
 
+              {/* Phone Number */}
+              <div>
+                <label htmlFor="reg-phone" className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2 block">
+                  Phone Number *
+                </label>
+                <input
+                  id="reg-phone"
+                  type="tel"
+                  autoComplete="tel"
+                  placeholder="+91 9876543210"
+                  value={regPhone}
+                  onChange={(e) => setRegPhone(e.target.value)}
+                  className="w-full bg-slate-50 rounded-2xl px-5 py-3.5 text-slate-800 font-semibold border-2 border-slate-100 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/10 outline-none transition-all placeholder:text-slate-300"
+                />
+              </div>
+
               {/* Password */}
               <div>
                 <label htmlFor="reg-password" className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2 block">
@@ -332,7 +349,7 @@ const Login: React.FC = () => {
               {/* Submit */}
               <button
                 type="submit"
-                disabled={isLoading || !regName.trim() || !email || password.length < 6}
+                disabled={isLoading || !regName.trim() || !email || !regPhone.trim() || password.length < 6}
                 className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white py-4.5 rounded-2xl font-black text-xs uppercase tracking-[0.25em] hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-xl shadow-emerald-200 active:scale-[0.98]"
               >
                 {isLoading ? (
