@@ -182,7 +182,7 @@ const Login: React.FC = () => {
               <button
                 type="submit"
                 disabled={isLoading || !email || !password}
-                className="w-full bg-gradient-to-r from-rose-500 to-rose-600 text-white py-4.5 rounded-2xl font-black text-xs uppercase tracking-[0.25em] hover:from-rose-600 hover:to-rose-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-xl shadow-rose-200 active:scale-[0.98]"
+                className="w-full bg-gradient-to-r from-rose-500 to-rose-600 text-white py-5 rounded-2xl font-black text-sm uppercase tracking-[0.25em] hover:from-rose-600 hover:to-rose-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-xl shadow-rose-200 active:scale-[0.98]"
               >
                 {isLoading ? (
                   <><Loader2 className="animate-spin" size={16} /> AUTHENTICATING...</>
