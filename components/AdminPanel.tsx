@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck, Users, CheckCircle, XCircle, FileText, Loader2, RefreshCw, Eye, Phone, Mail, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { UserProfile, UserRole } from '../types';
 import { getPendingUsers, approveUser, rejectUser } from '../services/firestoreService';
+import { clearAndSeedDatabase } from '../services/seedService';
 import { logger } from '../lib/logger';
 
 const AdminPanel: React.FC = () => {
@@ -9,6 +10,7 @@ const AdminPanel: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [isSeeding, setIsSeeding] = useState(false);
 
   const loadPendingUsers = useCallback(async () => {
     setIsLoading(true);
@@ -64,11 +66,38 @@ const AdminPanel: React.FC = () => {
         </div>
         <button
           onClick={loadPendingUsers}
-          disabled={isLoading}
+          disabled={isLoading || isSeeding}
           className="bg-white border-2 border-slate-200 px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest text-slate-600 flex items-center gap-2 hover:bg-slate-50 transition-all"
         >
           <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
           Refresh
+        </button>
+      </div>      {/* Admin Actions */}
+      <div className="bg-red-50 border border-red-100 p-5 rounded-3xl flex items-center justify-between gap-4 mb-8">
+        <div>
+          <h3 className="text-red-800 font-bold">Database Management</h3>
+          <p className="text-red-600 text-sm">Clear existing data and seed with 200 donors, 20 blood banks, and admin.</p>
+        </div>
+        <button
+          onClick={async () => {
+            if (confirm('Are you sure? This will wipe the database and seed new data.')) {
+              setIsSeeding(true);
+              try {
+                await clearAndSeedDatabase();
+                alert('Seed complete! 200 donors, 20 blood banks, and 1 admin created. The app will reload.');
+                window.location.reload();
+              } catch (err) {
+                console.error(err);
+                alert('Seed failed. Check console.');
+              } finally {
+                setIsSeeding(false);
+              }
+            }
+          }}
+          disabled={isSeeding}
+          className="bg-red-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-700 disabled:opacity-50 flex items-center gap-2 transition-all shadow-lg shadow-red-200 whitespace-nowrap"
+        >
+          {isSeeding ? <><Loader2 size={16} className="animate-spin" /> SEEDING...</> : 'SEED DATABASE'}
         </button>
       </div>
 

@@ -14,6 +14,7 @@ import { onAuthChange, signOutUser } from './lib/auth';
 import { getUserProfile, updateUserProfile, seedBloodBanks } from './services/firestoreService';
 import { logger } from './lib/logger';
 import { Package, MapPin, RefreshCw, Clock, XCircle, LogOut } from 'lucide-react';
+import { clearAndSeedDatabase } from './services/seedService';
 
 // --- Auth Context ---
 interface AuthContextType {
@@ -307,6 +308,19 @@ const App: React.FC = () => {
           <Route path="/history" element={<ProtectedRoute allowedRoles={[UserRole.USER]}><DonationHistory /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute allowedRoles={[UserRole.ADMIN]}><AdminPanel /></ProtectedRoute>} />
           <Route path="/inventory" element={<ProtectedRoute allowedRoles={[UserRole.BLOOD_BANK]}><InventoryManager /></ProtectedRoute>} />
+          <Route path="/seed" element={
+            <div className="min-h-screen flex items-center justify-center p-4">
+              <button onClick={async () => {
+                try {
+                  await clearAndSeedDatabase();
+                  alert('Seeded successfully!');
+                  window.location.href = '/';
+                } catch (e) {
+                  alert('Error: ' + e);
+                }
+              }} className="bg-red-600 text-white px-8 py-4 rounded-xl font-bold">RUN SEEDER</button>
+            </div>
+          } />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <AuthGateChat />
