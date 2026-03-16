@@ -204,12 +204,11 @@ export const clearAndSeedDatabase = async (): Promise<void> => {
   logger.info('✅ Cleared all collections');
 
   // ===== ADMIN =====
-  logger.info('👤 Creating admin account...');
+  logger.info('👤 Creating admin account in Firestore...');
   try {
-    const { createUserWithEmailAndPassword: createUser } = await import('firebase/auth');
-    const adminCred = await createUser(auth, 'prajwal08042006@gmail.com', 'Praju@123');
-    await setDoc(doc(db, 'users', adminCred.user.uid), {
-      uid: adminCred.user.uid,
+    const adminUid = 'admin_prajwal08042006';
+    await setDoc(doc(db, 'users', adminUid), {
+      uid: adminUid,
       name: 'Prajwal Admin',
       email: 'prajwal08042006@gmail.com',
       phone: '+91 9876543210',
@@ -224,34 +223,9 @@ export const clearAndSeedDatabase = async (): Promise<void> => {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    logger.info('✅ Admin created: prajwal08042006@gmail.com');
+    logger.info('✅ Admin Firestore profile created/updated');
   } catch (err: unknown) {
-    const error = err as { code?: string };
-    if (error.code === 'auth/email-already-in-use') {
-      logger.info('ℹ️ Admin account already exists in Auth, updating Firestore profile...');
-      // Find the existing user and update their profile
-      const { signInWithEmailAndPassword } = await import('firebase/auth');
-      const cred = await signInWithEmailAndPassword(auth, 'prajwal08042006@gmail.com', 'Praju@123');
-      await setDoc(doc(db, 'users', cred.user.uid), {
-        uid: cred.user.uid,
-        name: 'Prajwal Admin',
-        email: 'prajwal08042006@gmail.com',
-        phone: '+91 9876543210',
-        bloodGroup: 'O+',
-        role: UserRole.ADMIN,
-        isAvailable: false,
-        impactScore: 0,
-        location: { lat: 12.9716, lng: 77.5946, address: 'Bengaluru, KA' },
-        documents: [],
-        donationHistory: [],
-        accountStatus: 'APPROVED',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-      logger.info('✅ Admin Firestore profile updated');
-    } else {
-      logger.error('❌ Failed to create admin:', err);
-    }
+    logger.error('❌ Failed to create admin profile:', err);
   }
 
   // ===== 200 DONORS =====
@@ -266,7 +240,8 @@ export const clearAndSeedDatabase = async (): Promise<void> => {
       const loc = generateLocation();
       const userId = `donor_${String(i + 1).padStart(3, '0')}`;
 
-      batch.set(doc(db, 'users', userId), {
+      const hasLastDonated = Math.random() > 0.3;
+      const userData: any = {
         uid: userId,
         name,
         email,
@@ -276,7 +251,6 @@ export const clearAndSeedDatabase = async (): Promise<void> => {
         isAvailable: Math.random() > 0.15, // 85% available
         impactScore: randomInt(10, 800),
         location: loc,
-        lastDonated: Math.random() > 0.3 ? daysAgo(randomInt(15, 180)) : undefined,
         documents: [
           { id: `id_${i}`, type: 'ID_PROOF', name: 'Aadhaar Card.pdf', status: 'VERIFIED', uploadDate: daysAgo(randomInt(30, 365)) },
           { id: `med_${i}`, type: 'CERTIFICATE', name: 'Medical Certificate.pdf', status: 'VERIFIED', uploadDate: daysAgo(randomInt(30, 365)) },
@@ -290,7 +264,13 @@ export const clearAndSeedDatabase = async (): Promise<void> => {
         accountStatus: 'APPROVED',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      if (hasLastDonated) {
+        userData.lastDonated = daysAgo(randomInt(15, 180));
+      }
+
+      batch.set(doc(db, 'users', userId), userData);
     }
 
     await batch.commit();

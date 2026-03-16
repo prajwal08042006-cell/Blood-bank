@@ -3,6 +3,8 @@ import { Droplet, ShieldCheck, Mail, Loader2, Lock, Eye, EyeOff, ArrowLeft, Chec
 import { BloodGroup, UserRole } from '../types';
 import { signUp, logIn } from '../lib/auth';
 import { createUserProfile, getUserProfile } from '../services/firestoreService';
+import { db } from '../lib/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { logger } from '../lib/logger';
 
@@ -57,9 +59,32 @@ const Login: React.FC = () => {
     setIsLoading(true);
     try {
       const fbUser = await logIn(email, password);
-      const profile = await getUserProfile(fbUser.uid);
+      let profile = await getUserProfile(fbUser.uid);
+      
+      // Auto-sync Admin Profile if UID mismatches seed script
+      if (!profile && fbUser.email === 'prajwal08042006@gmail.com') {
+        logger.info('Auto-syncing Admin Auth UID to Firestore...');
+        await setDoc(doc(db, 'users', fbUser.uid), {
+          uid: fbUser.uid,
+          name: 'Prajwal Admin',
+          email: 'prajwal08042006@gmail.com',
+          phone: '+91 9876543210',
+          bloodGroup: 'O+',
+          role: UserRole.ADMIN,
+          isAvailable: false,
+          impactScore: 0,
+          location: { lat: 12.9716, lng: 77.5946, address: 'Bengaluru, KA' },
+          documents: [],
+          donationHistory: [],
+          accountStatus: 'APPROVED',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        profile = await getUserProfile(fbUser.uid);
+      }
+
       if (profile) {
-        navigate('/');
+        navigate(profile.role === UserRole.ADMIN ? '/admin' : '/');
       } else {
         setView('register-donor');
         setError('Complete your profile to continue.');
