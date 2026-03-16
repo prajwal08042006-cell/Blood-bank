@@ -1,21 +1,54 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Search, MapPin, Hospital, User, Info, Navigation, ShieldAlert, X, Target } from 'lucide-react';
-import { MOCK_DONORS, MOCK_BLOOD_BANKS, MOCK_REQUESTS } from '../constants';
+import { Search, MapPin, Hospital, User, Navigation, ShieldAlert, X, Target, Loader2 } from 'lucide-react';
 import { useAuth } from '../App';
+import { getAvailableDonors, getBloodBanks, getActiveRequests } from '../services/firestoreService';
+import { UserProfile, BloodBank, EmergencyRequest } from '../types';
+import { logger } from '../lib/logger';
 
 declare const L: any;
 
 const LiveMap: React.FC = () => {
-  const { userLocation, user } = useAuth();
+  const { userLocation } = useAuth();
   const [search, setSearch] = useState('');
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const [selectedEntity, setSelectedEntity] = useState<any>(null);
+  const [donors, setDonors] = useState<UserProfile[]>([]);
+  const [banks, setBanks] = useState<BloodBank[]>([]);
+  const [requests, setRequests] = useState<EmergencyRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load data from Firestore
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [d, b, r] = await Promise.all([
+          getAvailableDonors(),
+          getBloodBanks(),
+          getActiveRequests(),
+        ]);
+        setDonors(d);
+        setBanks(b);
+        setRequests(r);
+      } catch (err) {
+        logger.error('Failed to load map data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, []);
 
   const initMap = () => {
-    if (!mapContainerRef.current) return;
+    if (!mapContainerRef.current || isLoading) return;
     
+    // Clear existing map
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+    }
+
     const center: [number, number] = userLocation ? [userLocation.lat, userLocation.lng] : [12.9716, 77.5946];
     const map = L.map(mapContainerRef.current).setView(center, 13);
     mapInstanceRef.current = map;
@@ -38,8 +71,8 @@ const LiveMap: React.FC = () => {
         .openPopup();
     }
 
-    // Add Donors
-    MOCK_DONORS.forEach(donor => {
+    // Add Donors from Firestore
+    donors.forEach(donor => {
       if (!donor.isAvailable) return;
       const donorIcon = L.divIcon({
         className: 'custom-marker-donor',
@@ -51,8 +84,8 @@ const LiveMap: React.FC = () => {
         .on('click', () => setSelectedEntity({ ...donor, type: 'DONOR' }));
     });
 
-    // Add Blood Banks
-    MOCK_BLOOD_BANKS.forEach(bank => {
+    // Add Blood Banks from Firestore
+    banks.forEach(bank => {
       const bankIcon = L.divIcon({
         className: 'custom-marker-bank',
         html: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`,
@@ -63,8 +96,8 @@ const LiveMap: React.FC = () => {
         .on('click', () => setSelectedEntity({ ...bank, type: 'BANK' }));
     });
 
-    // Add Requests
-    MOCK_REQUESTS.forEach(req => {
+    // Add Emergency Requests from Firestore
+    requests.forEach(req => {
       const reqIcon = L.divIcon({
         className: 'custom-marker-request',
         html: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>`,
@@ -81,7 +114,7 @@ const LiveMap: React.FC = () => {
     return () => {
       if (mapInstanceRef.current) mapInstanceRef.current.remove();
     };
-  }, [userLocation]);
+  }, [userLocation, isLoading, donors, banks, requests]);
 
   const handleRecenter = () => {
     if (mapInstanceRef.current && userLocation) {
@@ -96,16 +129,26 @@ const LiveMap: React.FC = () => {
           <div className="pl-4 text-slate-400"><Search size={22} /></div>
           <input
             type="text"
-            placeholder="Search Bengaluru facilities..."
+            placeholder="Search Karnataka facilities..."
             className="flex-1 bg-transparent py-3 focus:outline-none text-slate-800 font-medium placeholder-slate-400"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search facilities"
           />
           <button className="bg-rose-600 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all">
             FIND
           </button>
         </div>
       </div>
+
+      {isLoading && (
+        <div className="absolute inset-0 z-[1001] bg-white/80 backdrop-blur-sm flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="animate-spin text-rose-600 mx-auto mb-4" size={40} />
+            <p className="text-slate-400 font-black text-xs uppercase tracking-widest">Loading map data...</p>
+          </div>
+        </div>
+      )}
 
       <div id="map" ref={mapContainerRef} className="flex-1"></div>
 

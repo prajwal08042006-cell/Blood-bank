@@ -25,6 +25,7 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   bloodGroup: BloodGroup;
   lastDonated?: string; // ISO Date
   isAvailable: boolean;

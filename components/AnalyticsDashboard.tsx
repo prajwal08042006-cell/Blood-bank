@@ -1,8 +1,11 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Activity, Users, Droplets, Clock, TrendingUp, MapPin, Download, ShieldCheck, MoreVertical } from 'lucide-react';
+import { Activity, Users, Droplets, Clock, TrendingUp, MapPin, Download, ShieldCheck, MoreVertical, Loader2 } from 'lucide-react';
 import { useAuth } from '../App';
+import { getAllDonors, getActiveRequests } from '../services/firestoreService';
+import { UserProfile, EmergencyRequest } from '../types';
+import { logger } from '../lib/logger';
 
 const dataTrend = [
   { name: 'Mon', requests: 45, donations: 62 },
@@ -24,7 +27,39 @@ const dataGroups = [
 const COLORS = ['#e11d48', '#fb7185', '#fda4af', '#fff1f2'];
 
 const AnalyticsDashboard: React.FC = () => {
-  const { allUsers } = useAuth();
+  const { user } = useAuth();
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [requests, setRequests] = useState<EmergencyRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [users, reqs] = await Promise.all([
+          getAllDonors(),
+          getActiveRequests(),
+        ]);
+        setAllUsers(users);
+        setRequests(reqs);
+      } catch (err) {
+        logger.error('Failed to load analytics:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="p-8 md:p-12 flex items-center justify-center min-h-full">
+        <div className="text-center">
+          <Loader2 className="animate-spin text-rose-600 mx-auto mb-4" size={40} />
+          <p className="text-slate-400 font-black text-xs uppercase tracking-widest">Loading analytics...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 md:p-12 bg-slate-50 min-h-full max-w-7xl mx-auto space-y-12">
@@ -42,10 +77,10 @@ const AnalyticsDashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Statewide Donors', value: allUsers.length.toString(), icon: <Users />, color: 'bg-blue-600', trend: '+12%' },
-          { label: 'Active KA Requests', value: '428', icon: <Activity />, color: 'bg-rose-600', trend: '-2%' },
-          { label: 'Donations (Month)', value: '12,482', icon: <Droplets />, color: 'bg-emerald-600', trend: '+5%' },
-          { label: 'State Avg Response', value: '11.4m', icon: <Clock />, color: 'bg-amber-600', trend: '-0.5m' },
+          { label: 'Registered Donors', value: allUsers.length.toString(), icon: <Users />, color: 'bg-blue-600', trend: '+' + allUsers.length },
+          { label: 'Active Requests', value: requests.length.toString(), icon: <Activity />, color: 'bg-rose-600', trend: requests.length > 0 ? `${requests.length} live` : '0' },
+          { label: 'Donations (Month)', value: '—', icon: <Droplets />, color: 'bg-emerald-600', trend: 'Live data' },
+          { label: 'State Avg Response', value: '—', icon: <Clock />, color: 'bg-amber-600', trend: 'Tracking' },
         ].map((stat, i) => (
           <div key={i} className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 relative overflow-hidden group">
             <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full opacity-5 group-hover:scale-150 transition-all duration-700 ${stat.color}`}></div>
@@ -57,7 +92,7 @@ const AnalyticsDashboard: React.FC = () => {
                 <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">{stat.label}</p>
                 <h3 className="text-3xl font-black text-slate-800 tracking-tighter">{stat.value}</h3>
               </div>
-              <span className={`text-[10px] font-black px-2 py-1 rounded-full ${stat.trend.startsWith('+') ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+              <span className="text-[10px] font-black px-2 py-1 rounded-full bg-slate-50 text-slate-500">
                 {stat.trend}
               </span>
             </div>
@@ -91,20 +126,24 @@ const AnalyticsDashboard: React.FC = () => {
         </div>
 
         <div className="lg:col-span-4 bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm">
-          <h3 className="font-black text-slate-800 text-xl mb-10">System Users</h3>
+          <h3 className="font-black text-slate-800 text-xl mb-10">Registered Users</h3>
           <div className="space-y-4 max-h-[350px] overflow-y-auto pr-2">
-            {allUsers.map((u, i) => (
-              <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 font-bold">{u.name.charAt(0)}</div>
-                  <div>
-                    <p className="text-sm font-black text-slate-800">{u.name}</p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">{u.role}</p>
+            {allUsers.length === 0 ? (
+              <p className="text-slate-400 text-sm text-center py-8">No registered donors yet</p>
+            ) : (
+              allUsers.map((u, i) => (
+                <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 font-bold">{u.name.charAt(0)}</div>
+                    <div>
+                      <p className="text-sm font-black text-slate-800">{u.name}</p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">{u.role} • {u.bloodGroup}</p>
+                    </div>
                   </div>
+                  <button onClick={() => alert(`Managing user ${u.name}`)} className="text-slate-300 hover:text-slate-600"><MoreVertical size={18} /></button>
                 </div>
-                <button onClick={() => alert(`Managing user ${u.name}`)} className="text-slate-300 hover:text-slate-600"><MoreVertical size={18} /></button>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

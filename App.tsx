@@ -1,7 +1,7 @@
 
-import React, { useState, createContext, useContext, useMemo, useEffect } from 'react';
-import { logger } from './lib/logger';
+import React, { useState, createContext, useContext, useEffect, useCallback } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { User as FirebaseUser } from 'firebase/auth';
 import Layout from './components/Layout';
 import LiveMap from './components/LiveMap';
 import EmergencyPanel from './components/EmergencyPanel';
@@ -9,19 +9,21 @@ import AnalyticsDashboard from './components/AnalyticsDashboard';
 import ChatBot from './components/ChatBot';
 import DonationHistory from './components/DonationHistory';
 import Login from './components/Login';
-import { UserRole, UserProfile, Location, UserDocument, BloodGroup } from './types';
-import { CURRENT_USER, MOCK_DONORS, MOCK_BLOOD_BANKS, MOCK_REQUESTS } from './constants';
-import { Package, Activity, MapPin, CheckCircle, Clock, AlertTriangle, Zap, RefreshCw, Users, PlusCircle } from 'lucide-react';
+import { UserRole, UserProfile, Location, BloodGroup } from './types';
+import { onAuthChange, signOutUser } from './lib/auth';
+import { getUserProfile, updateUserProfile, seedBloodBanks } from './services/firestoreService';
+import { logger } from './lib/logger';
+import { Package, MapPin, RefreshCw } from 'lucide-react';
 
 // --- Auth Context ---
 interface AuthContextType {
+  firebaseUser: FirebaseUser | null;
   user: UserProfile | null;
-  allUsers: UserProfile[];
-  login: (id: string, pass: string, role: UserRole) => boolean;
-  register: (profile: Partial<UserProfile>) => void;
-  logout: () => void;
+  loading: boolean;
   userLocation: Location | null;
-  updateUser: (updates: Partial<UserProfile>) => void;
+  logout: () => Promise<void>;
+  updateUser: (updates: Partial<UserProfile>) => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -33,115 +35,117 @@ export const useAuth = () => {
 };
 
 const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [allUsers, setAllUsers] = useState<UserProfile[]>([...MOCK_DONORS, CURRENT_USER]);
+  const [loading, setLoading] = useState(true);
   const [userLocation, setUserLocation] = useState<Location | null>(null);
 
+  // Get user geolocation
   useEffect(() => {
     if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition((position) => {
-        setUserLocation({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          address: "Detected Live Location"
-        });
-      }, (error) => {
-        logger.warn("Location access denied, defaulting to Bengaluru central.");
-        setUserLocation({ lat: 12.9716, lng: 77.5946, address: "Bengaluru, KA" });
-      });
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            address: "Detected Live Location",
+          });
+        },
+        () => {
+          logger.warn("Location access denied, defaulting to Bengaluru central.");
+          setUserLocation({ lat: 12.9716, lng: 77.5946, address: "Bengaluru, KA" });
+        }
+      );
     }
   }, []);
 
-  const login = (id: string, pass: string, role: UserRole) => {
-    // 1. Check existing users (Donors/Users)
-    const found = allUsers.find(u => (u.id === id || u.email === id) && u.role === role);
-    if (found) {
-      setUser(found);
-      return true;
-    }
-
-    // 2. Check Mock Blood Banks (if role is BLOOD_BANK)
-    if (role === UserRole.BLOOD_BANK) {
-      const bank = MOCK_BLOOD_BANKS.find(b => b.id === id || b.name === id || b.contact === id);
-      if (bank) {
-        const bankUser: UserProfile = {
-          id: bank.id,
-          name: bank.name,
-          email: `${bank.name.split(' ')[0].toLowerCase()}@bloodlife.com`, // Mock email
-          bloodGroup: 'O+', // Irrelevant
-          isAvailable: true,
-          role: UserRole.BLOOD_BANK,
-          impactScore: 1000,
-          location: bank.location,
-          documents: [],
-          donationHistory: [],
-          stock: bank.stock
-        };
-        setUser(bankUser);
-        return true;
+  // Listen to Firebase Auth state
+  useEffect(() => {
+    const unsubscribe = onAuthChange(async (fbUser) => {
+      setFirebaseUser(fbUser);
+      if (fbUser) {
+        try {
+          const profile = await getUserProfile(fbUser.uid);
+          setUser(profile);
+          // Seed blood bank data on first authenticated load
+          await seedBloodBanks();
+        } catch (err) {
+          logger.error('Failed to load profile:', err);
+          setUser(null);
+        }
+      } else {
+        setUser(null);
       }
-    }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
-    // 3. Fallback: Create new user (Demo Mode)
-    if (id && pass) {
-      const newUser = { ...CURRENT_USER, id, name: id.split('@')[0], role, donationHistory: [], documents: [] };
-      setUser(newUser);
-      return true;
-    }
-    return false;
+  const logout = useCallback(async () => {
+    await signOutUser();
+    setUser(null);
+    setFirebaseUser(null);
+  }, []);
+
+  const updateUser = useCallback(async (updates: Partial<UserProfile>) => {
+    if (!firebaseUser || !user) return;
+    await updateUserProfile(firebaseUser.uid, updates);
+    setUser((prev) => (prev ? { ...prev, ...updates } : null));
+  }, [firebaseUser, user]);
+
+  const refreshProfile = useCallback(async () => {
+    if (!firebaseUser) return;
+    const profile = await getUserProfile(firebaseUser.uid);
+    setUser(profile);
+  }, [firebaseUser]);
+
+  const value = {
+    firebaseUser,
+    user,
+    loading,
+    userLocation,
+    logout,
+    updateUser,
+    refreshProfile,
   };
 
-  const register = (profile: Partial<UserProfile>) => {
-    const newUser: UserProfile = {
-      id: `KA-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-      name: profile.name || 'Anonymous',
-      email: profile.email || '',
-      bloodGroup: profile.bloodGroup || 'O+',
-      isAvailable: true,
-      role: profile.role || UserRole.USER,
-      impactScore: profile.impactScore || 0,
-      location: userLocation || { lat: 12.9716, lng: 77.5946 },
-      documents: profile.documents || [],
-      donationHistory: profile.donationHistory || [],
-      ...profile
-    } as UserProfile;
-    setAllUsers(prev => [...prev, newUser]);
-    setUser(newUser);
-  };
-
-  const updateUser = (updates: Partial<UserProfile>) => {
-    if (user) {
-      const updatedUser = { ...user, ...updates };
-      setUser(updatedUser);
-      setAllUsers(prev => prev.map(u => u.id === user.id ? updatedUser : u));
-    }
-  };
-
-  const logout = () => setUser(null);
-
-  const value = useMemo(() => ({ user, allUsers, login, register, logout, userLocation, updateUser }), [user, allUsers, userLocation]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
+// --- Loading screen ---
+const LoadingScreen: React.FC = () => (
+  <div className="min-h-screen bg-[#FDFDFF] flex items-center justify-center">
+    <div className="text-center">
+      <div className="w-20 h-20 bg-rose-600 rounded-[2rem] flex items-center justify-center mx-auto mb-6 animate-pulse shadow-2xl shadow-rose-200">
+        <Package className="text-white" size={40} />
+      </div>
+      <p className="text-slate-400 font-black text-xs uppercase tracking-[0.3em]">Loading BloodLife...</p>
+    </div>
+  </div>
+);
+
+// --- Protected Route ---
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserRole[] }> = ({
   children,
-  allowedRoles
+  allowedRoles,
 }) => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace />;
   if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
   return <Layout>{children}</Layout>;
 };
 
+// --- Inventory Manager ---
 const InventoryManager = () => {
   const { user } = useAuth();
-  const initialStock = user?.stock || MOCK_BLOOD_BANKS[0].stock;
+  const initialStock = user?.stock || { 'A+': 0, 'A-': 0, 'B+': 0, 'B-': 0, 'AB+': 0, 'AB-': 0, 'O+': 0, 'O-': 0 };
   const [stock, setStock] = useState<Record<BloodGroup, number>>(initialStock);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setStock(prev => {
+      setStock((prev) => {
         const next = { ...prev };
         const keys = Object.keys(next) as Array<keyof typeof next>;
         const randomKey = keys[Math.floor(Math.random() * keys.length)];
@@ -159,7 +163,7 @@ const InventoryManager = () => {
         <div>
           <h1 className="text-5xl font-black text-slate-800 tracking-tighter">Inventory Control</h1>
           <p className="text-slate-400 font-bold mt-2 flex items-center gap-2">
-            <MapPin size={18} className="text-blue-600" /> {user?.name || "Narayana Health, Bannerghatta Road, Bengaluru"}
+            <MapPin size={18} className="text-blue-600" /> {user?.name || "Blood Bank"}
           </p>
         </div>
         <div className="flex gap-4 w-full md:w-auto">
@@ -183,7 +187,6 @@ const InventoryManager = () => {
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               {Object.entries(stock).map(([group, units]) => {
-                // Fixed: Operator '<' cannot be applied to types 'unknown' and 'number' by casting units to number
                 const count = units as number;
                 return (
                   <div key={group} className={`p-8 rounded-[2rem] border-2 transition-all ${count < 10 ? 'bg-rose-50 border-rose-200' : 'bg-slate-50/30 border-slate-100'}`}>
@@ -200,12 +203,38 @@ const InventoryManager = () => {
   );
 };
 
+// --- Home Dispatcher ---
+const HomeDispatcher = () => {
+  const { user, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role === UserRole.ADMIN) return <Navigate to="/admin" replace />;
+  if (user.role === UserRole.BLOOD_BANK) return <Navigate to="/inventory" replace />;
+  return <Navigate to="/map" replace />;
+};
+
+// --- Auth Gate Chat ---
+const AuthGateChat = () => {
+  const { user } = useAuth();
+  if (!user) return null;
+  return <ChatBot />;
+};
+
+// --- Login Gate ---
+const LoginGate = () => {
+  const { user, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (user) return <Navigate to="/" replace />;
+  return <Login />;
+};
+
+// --- App ---
 const App: React.FC = () => {
   return (
     <AuthProvider>
       <Router>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          <Route path="/login" element={<LoginGate />} />
           <Route path="/" element={<HomeDispatcher />} />
           <Route path="/map" element={<ProtectedRoute allowedRoles={[UserRole.USER, UserRole.ADMIN, UserRole.BLOOD_BANK]}><LiveMap /></ProtectedRoute>} />
           <Route path="/emergency" element={<ProtectedRoute allowedRoles={[UserRole.USER]}><EmergencyPanel /></ProtectedRoute>} />
@@ -218,20 +247,6 @@ const App: React.FC = () => {
       </Router>
     </AuthProvider>
   );
-};
-
-const HomeDispatcher = () => {
-  const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
-  if (user.role === UserRole.ADMIN) return <Navigate to="/admin" replace />;
-  if (user.role === UserRole.BLOOD_BANK) return <Navigate to="/inventory" replace />;
-  return <Navigate to="/map" replace />;
-};
-
-const AuthGateChat = () => {
-  const { user } = useAuth();
-  if (!user) return null;
-  return <ChatBot />;
 };
 
 export default App;
