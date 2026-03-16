@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Droplet, ShieldCheck, Mail, Loader2, Lock, Eye, EyeOff, ArrowLeft, CheckCircle, UserPlus } from 'lucide-react';
+import { Droplet, ShieldCheck, Mail, Loader2, Lock, Eye, EyeOff, ArrowLeft, CheckCircle, UserPlus, FileText, Upload } from 'lucide-react';
 import { BloodGroup, UserRole } from '../types';
 import { signUp, logIn } from '../lib/auth';
 import { createUserProfile, getUserProfile } from '../services/firestoreService';
@@ -25,8 +25,20 @@ const Login: React.FC = () => {
   const [regName, setRegName] = useState('');
   const [regBloodGroup, setRegBloodGroup] = useState<BloodGroup>('O+');
   const [regPhone, setRegPhone] = useState('');
+  const [idProofFile, setIdProofFile] = useState<File | null>(null);
+  const [medCertFile, setMedCertFile] = useState<File | null>(null);
 
   const clearError = () => setError('');
+
+  // Convert file to base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (err) => reject(err);
+    });
+  };
 
   // ========== LOGIN ==========
   const handleLogin = async (e: React.FormEvent) => {
@@ -57,11 +69,42 @@ const Login: React.FC = () => {
     clearError();
     if (!regName.trim()) { setError('Name is required'); return; }
     if (!email) { setError('Email is required'); return; }
+    if (!regPhone.trim()) { setError('Phone number is required'); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (role === UserRole.USER && !idProofFile) { setError('ID Proof is required'); return; }
+    if (role === UserRole.USER && !medCertFile) { setError('Medical Certificate is required'); return; }
 
     setIsLoading(true);
     try {
+      // Convert files to base64 for storage
+      let idProofData = '';
+      let medCertData = '';
+      if (idProofFile) idProofData = await fileToBase64(idProofFile);
+      if (medCertFile) medCertData = await fileToBase64(medCertFile);
+
       const fbUser = await signUp(email, password);
+
+      const documents = [];
+      if (idProofFile) {
+        documents.push({
+          id: `id_${Date.now()}`,
+          type: 'ID_PROOF' as const,
+          name: idProofFile.name,
+          status: 'PENDING' as const,
+          uploadDate: new Date().toISOString(),
+          data: idProofData,
+        });
+      }
+      if (medCertFile) {
+        documents.push({
+          id: `med_${Date.now()}`,
+          type: 'CERTIFICATE' as const,
+          name: medCertFile.name,
+          status: 'PENDING' as const,
+          uploadDate: new Date().toISOString(),
+          data: medCertData,
+        });
+      }
 
       await createUserProfile(fbUser.uid, {
         name: regName.trim(),
@@ -69,9 +112,9 @@ const Login: React.FC = () => {
         email: email,
         bloodGroup: regBloodGroup,
         role: role,
+        documents: documents,
       });
 
-      // Show verification screen
       setView('verify-email');
     } catch (err: unknown) {
       setError((err as Error).message);
@@ -106,12 +149,11 @@ const Login: React.FC = () => {
         {/* ========== LOGIN VIEW ========== */}
         {view === 'login' && (
           <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-100 p-10 border border-slate-100">
-            {/* Role Tabs */}
+            {/* Role Tabs — no ADMIN */}
             <div className="flex bg-slate-50 rounded-2xl p-1.5 mb-8 border border-slate-100">
               {[
                 { value: UserRole.USER, label: 'USER' },
                 { value: UserRole.BLOOD_BANK, label: 'BLOOD_BANK' },
-                { value: UserRole.ADMIN, label: 'ADMIN' },
               ].map(({ value, label }) => (
                 <button
                   key={value}
@@ -222,15 +264,14 @@ const Login: React.FC = () => {
                 <UserPlus className="text-emerald-600" size={28} />
               </div>
               <h2 className="text-xl font-black text-slate-800 tracking-tight">Create Account</h2>
-              <p className="text-slate-400 text-[11px] font-bold mt-1">A verification email will be sent for OTP confirmation</p>
+              <p className="text-slate-400 text-[11px] font-bold mt-1">A verification email will be sent for confirmation</p>
             </div>
 
-            {/* Role Selection */}
+            {/* Role Selection — no ADMIN */}
             <div className="flex bg-slate-50 rounded-2xl p-1.5 mb-6 border border-slate-100">
               {[
-                { value: UserRole.USER, label: 'USER' },
-                { value: UserRole.BLOOD_BANK, label: 'BLOOD_BANK' },
-                { value: UserRole.ADMIN, label: 'ADMIN' },
+                { value: UserRole.USER, label: 'DONOR' },
+                { value: UserRole.BLOOD_BANK, label: 'BLOOD BANK' },
               ].map(({ value, label }) => (
                 <button
                   key={value}
@@ -267,7 +308,7 @@ const Login: React.FC = () => {
               {/* Email */}
               <div>
                 <label htmlFor="reg-email" className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2 block">
-                  Email Address (OTP will be sent here)
+                  Email Address
                 </label>
                 <input
                   id="reg-email"
@@ -283,7 +324,7 @@ const Login: React.FC = () => {
               {/* Phone Number */}
               <div>
                 <label htmlFor="reg-phone" className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2 block">
-                  Phone Number *
+                  Phone Number
                 </label>
                 <input
                   id="reg-phone"
@@ -339,6 +380,93 @@ const Login: React.FC = () => {
                 </select>
               </div>
 
+              {/* ID Proof & Medical Certificate — only for USER role */}
+              {role === UserRole.USER && (
+                <>
+                  {/* ID Proof Upload */}
+                  <div>
+                    <label htmlFor="id-proof" className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2 block">
+                      Government ID Proof *
+                    </label>
+                    <div
+                      className={`relative border-2 border-dashed rounded-2xl p-4 text-center transition-all cursor-pointer hover:border-emerald-400 ${
+                        idProofFile ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-slate-50'
+                      }`}
+                      onClick={() => document.getElementById('id-proof')?.click()}
+                    >
+                      <input
+                        id="id-proof"
+                        type="file"
+                        accept="image/*,.pdf"
+                        className="hidden"
+                        onChange={(e) => setIdProofFile(e.target.files?.[0] || null)}
+                      />
+                      {idProofFile ? (
+                        <div className="flex items-center gap-3">
+                          <div className="bg-emerald-500 text-white p-2 rounded-xl">
+                            <FileText size={18} />
+                          </div>
+                          <div className="text-left flex-1 min-w-0">
+                            <p className="text-xs font-black text-emerald-700 truncate">{idProofFile.name}</p>
+                            <p className="text-[10px] text-emerald-500 font-bold">{(idProofFile.size / 1024).toFixed(1)} KB • Ready to upload</p>
+                          </div>
+                          <CheckCircle size={18} className="text-emerald-500 flex-shrink-0" />
+                        </div>
+                      ) : (
+                        <div className="py-2">
+                          <Upload className="mx-auto text-slate-300 mb-2" size={24} />
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            Click to upload Aadhaar / PAN / Voter ID
+                          </p>
+                          <p className="text-[9px] text-slate-300 mt-1">JPG, PNG, PDF up to 5MB</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Medical Certificate Upload */}
+                  <div>
+                    <label htmlFor="med-cert" className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2 block">
+                      Medical Fitness Certificate *
+                    </label>
+                    <div
+                      className={`relative border-2 border-dashed rounded-2xl p-4 text-center transition-all cursor-pointer hover:border-emerald-400 ${
+                        medCertFile ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-slate-50'
+                      }`}
+                      onClick={() => document.getElementById('med-cert')?.click()}
+                    >
+                      <input
+                        id="med-cert"
+                        type="file"
+                        accept="image/*,.pdf"
+                        className="hidden"
+                        onChange={(e) => setMedCertFile(e.target.files?.[0] || null)}
+                      />
+                      {medCertFile ? (
+                        <div className="flex items-center gap-3">
+                          <div className="bg-emerald-500 text-white p-2 rounded-xl">
+                            <FileText size={18} />
+                          </div>
+                          <div className="text-left flex-1 min-w-0">
+                            <p className="text-xs font-black text-emerald-700 truncate">{medCertFile.name}</p>
+                            <p className="text-[10px] text-emerald-500 font-bold">{(medCertFile.size / 1024).toFixed(1)} KB • Ready to upload</p>
+                          </div>
+                          <CheckCircle size={18} className="text-emerald-500 flex-shrink-0" />
+                        </div>
+                      ) : (
+                        <div className="py-2">
+                          <Upload className="mx-auto text-slate-300 mb-2" size={24} />
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            Click to upload Medical Certificate
+                          </p>
+                          <p className="text-[9px] text-slate-300 mt-1">JPG, PNG, PDF up to 5MB</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
               {/* Error */}
               {error && (
                 <div className="bg-rose-50 text-rose-600 p-3 rounded-2xl border border-rose-100 text-center">
@@ -349,13 +477,13 @@ const Login: React.FC = () => {
               {/* Submit */}
               <button
                 type="submit"
-                disabled={isLoading || !regName.trim() || !email || !regPhone.trim() || password.length < 6}
-                className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white py-4.5 rounded-2xl font-black text-xs uppercase tracking-[0.25em] hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-xl shadow-emerald-200 active:scale-[0.98]"
+                disabled={isLoading || !regName.trim() || !email || !regPhone.trim() || password.length < 6 || (role === UserRole.USER && (!idProofFile || !medCertFile))}
+                className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white py-5 rounded-2xl font-black text-sm uppercase tracking-[0.25em] hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-xl shadow-emerald-200 active:scale-[0.98]"
               >
                 {isLoading ? (
                   <><Loader2 className="animate-spin" size={16} /> CREATING...</>
                 ) : (
-                  'CREATE ACCOUNT & SEND OTP'
+                  'CREATE ACCOUNT & VERIFY'
                 )}
               </button>
             </form>
@@ -375,25 +503,24 @@ const Login: React.FC = () => {
             <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 mb-6 text-left space-y-2">
               <p className="text-blue-700 text-sm font-bold">📩 Steps to complete:</p>
               <ol className="text-blue-600 text-xs font-medium space-y-1 list-decimal pl-4">
-                <li>Open your email inbox</li>
-                <li>Find the email from <strong>noreply@blood-bank-ad3a9.firebaseapp.com</strong></li>
-                <li>Click the verification link in the email</li>
-                <li>Come back here and log in with your credentials</li>
+                <li>Open your email inbox (check spam too)</li>
+                <li>Find the email from Firebase</li>
+                <li>Click the verification link</li>
+                <li>Come back here and log in</li>
               </ol>
-              <p className="text-blue-500 text-[10px] font-bold mt-2">💡 Check your spam/junk folder if you don't see it</p>
             </div>
 
             <div className="flex items-center gap-3 p-4 bg-emerald-50 rounded-2xl border border-emerald-100 mb-6">
               <CheckCircle className="text-emerald-600 flex-shrink-0" size={20} />
               <p className="text-emerald-700 text-xs font-bold text-left">
-                Account created! You must verify your email before you can log in.
+                Account created! Documents uploaded for verification. You must verify your email before logging in.
               </p>
             </div>
 
             <button
               type="button"
               onClick={() => { setView('login'); setPassword(''); clearError(); }}
-              className="w-full bg-gradient-to-r from-rose-500 to-rose-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-[0.25em] hover:from-rose-600 hover:to-rose-700 transition-all shadow-xl shadow-rose-200 active:scale-[0.98]"
+              className="w-full bg-gradient-to-r from-rose-500 to-rose-600 text-white py-5 rounded-2xl font-black text-sm uppercase tracking-[0.25em] hover:from-rose-600 hover:to-rose-700 transition-all shadow-xl shadow-rose-200 active:scale-[0.98]"
             >
               GO TO LOGIN
             </button>
