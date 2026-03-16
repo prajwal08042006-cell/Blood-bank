@@ -18,8 +18,8 @@ export const CURRENT_USER: UserProfile = {
   location: { lat: 12.9716, lng: 77.5946, address: 'Koramangala, Bengaluru, KA' },
   // Adding missing documents property
   documents: [],
-  // Adding missing donationHistory property
-  donationHistory: []
+  donationHistory: [],
+  accountStatus: 'APPROVED'
 };
 
 export const MOCK_DONORS: UserProfile[] = [
@@ -35,8 +35,8 @@ export const MOCK_DONORS: UserProfile[] = [
     lastDonated: '2023-11-15',
     // Adding missing documents property
     documents: [],
-    // Adding missing donationHistory property
-    donationHistory: []
+    donationHistory: [],
+    accountStatus: 'APPROVED'
   },
   {
     id: 'd2',
@@ -50,8 +50,8 @@ export const MOCK_DONORS: UserProfile[] = [
     lastDonated: '2024-02-01',
     // Adding missing documents property
     documents: [],
-    // Adding missing donationHistory property
-    donationHistory: []
+    donationHistory: [],
+    accountStatus: 'APPROVED'
   },
   {
     id: 'd3',
@@ -64,8 +64,8 @@ export const MOCK_DONORS: UserProfile[] = [
     role: UserRole.USER,
     // Adding missing documents property
     documents: [],
-    // Adding missing donationHistory property
-    donationHistory: []
+    donationHistory: [],
+    accountStatus: 'APPROVED'
   }
 ];
 

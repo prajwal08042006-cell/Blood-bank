@@ -14,7 +14,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { UserProfile, BloodGroup, UserRole, BloodBank, EmergencyRequest, UserDocument } from '../types';
+import { UserProfile, BloodGroup, UserRole, BloodBank, EmergencyRequest, UserDocument, AccountStatus } from '../types';
 import { logger } from '../lib/logger';
 
 // ============================
@@ -31,6 +31,7 @@ export const createUserProfile = async (
     role: UserRole;
     location?: { lat: number; lng: number; address?: string };
     documents?: UserDocument[];
+    licenseNumber?: string;
   }
 ): Promise<void> => {
   const userDoc = {
@@ -45,6 +46,8 @@ export const createUserProfile = async (
     location: data.location || { lat: 12.9716, lng: 77.5946, address: 'Bengaluru, KA' },
     documents: data.documents || [],
     donationHistory: [],
+    accountStatus: 'PENDING' as AccountStatus,
+    licenseNumber: data.licenseNumber || '',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -53,25 +56,27 @@ export const createUserProfile = async (
   logger.info('User profile created:', uid);
 };
 
+const mapDocToProfile = (id: string, data: Record<string, unknown>): UserProfile => ({
+  id,
+  name: data.name as string,
+  email: data.email as string,
+  phone: data.phone as string | undefined,
+  bloodGroup: data.bloodGroup as BloodGroup,
+  role: data.role as UserRole,
+  isAvailable: data.isAvailable as boolean,
+  impactScore: data.impactScore as number,
+  location: data.location as UserProfile['location'],
+  documents: (data.documents || []) as UserDocument[],
+  donationHistory: (data.donationHistory || []) as UserProfile['donationHistory'],
+  stock: data.stock as UserProfile['stock'],
+  accountStatus: (data.accountStatus || 'PENDING') as AccountStatus,
+  licenseNumber: data.licenseNumber as string | undefined,
+});
+
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
   const docSnap = await getDoc(doc(db, 'users', uid));
   if (!docSnap.exists()) return null;
-
-  const data = docSnap.data();
-  return {
-    id: uid,
-    name: data.name,
-    email: data.email,
-    phone: data.phone,
-    bloodGroup: data.bloodGroup,
-    role: data.role,
-    isAvailable: data.isAvailable,
-    impactScore: data.impactScore,
-    location: data.location,
-    documents: data.documents || [],
-    donationHistory: data.donationHistory || [],
-    stock: data.stock,
-  } as UserProfile;
+  return mapDocToProfile(uid, docSnap.data() as Record<string, unknown>);
 };
 
 export const updateUserProfile = async (
@@ -127,21 +132,41 @@ export const getAvailableDonors = async (bloodGroup?: BloodGroup): Promise<UserP
     );
   }
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((docSnap) => {
-    const data = docSnap.data();
-    return {
-      id: docSnap.id,
-      name: data.name,
-      email: data.email,
-      bloodGroup: data.bloodGroup,
-      role: data.role,
-      isAvailable: data.isAvailable,
-      impactScore: data.impactScore,
-      location: data.location,
-      documents: data.documents || [],
-      donationHistory: data.donationHistory || [],
-    } as UserProfile;
+  return snapshot.docs.map((docSnap) =>
+    mapDocToProfile(docSnap.id, docSnap.data() as Record<string, unknown>)
+  );
+};
+
+// ============================
+// ADMIN APPROVAL
+// ============================
+
+export const getPendingUsers = async (): Promise<UserProfile[]> => {
+  const q = query(
+    collection(db, 'users'),
+    where('accountStatus', '==', 'PENDING'),
+    limit(50)
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((docSnap) =>
+    mapDocToProfile(docSnap.id, docSnap.data() as Record<string, unknown>)
+  );
+};
+
+export const approveUser = async (uid: string): Promise<void> => {
+  await updateDoc(doc(db, 'users', uid), {
+    accountStatus: 'APPROVED',
+    updatedAt: serverTimestamp(),
   });
+  logger.info('User approved:', uid);
+};
+
+export const rejectUser = async (uid: string): Promise<void> => {
+  await updateDoc(doc(db, 'users', uid), {
+    accountStatus: 'REJECTED',
+    updatedAt: serverTimestamp(),
+  });
+  logger.info('User rejected:', uid);
 };
 
 // ============================

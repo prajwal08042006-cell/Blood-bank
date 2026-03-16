@@ -154,6 +154,7 @@ const Login: React.FC = () => {
         bloodGroup: 'O+',
         role: UserRole.BLOOD_BANK,
         location: { lat: 12.9716, lng: 77.5946, address: bankAddress.trim() },
+        licenseNumber: licenseNumber.trim(),
         documents: [
           {
             id: `lic_${Date.now()}`,

@@ -5,7 +5,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 import Layout from './components/Layout';
 import LiveMap from './components/LiveMap';
 import EmergencyPanel from './components/EmergencyPanel';
-import AnalyticsDashboard from './components/AnalyticsDashboard';
+import AdminPanel from './components/AdminPanel';
 import ChatBot from './components/ChatBot';
 import DonationHistory from './components/DonationHistory';
 import Login from './components/Login';
@@ -13,7 +13,7 @@ import { UserRole, UserProfile, Location, BloodGroup } from './types';
 import { onAuthChange, signOutUser } from './lib/auth';
 import { getUserProfile, updateUserProfile, seedBloodBanks } from './services/firestoreService';
 import { logger } from './lib/logger';
-import { Package, MapPin, RefreshCw } from 'lucide-react';
+import { Package, MapPin, RefreshCw, Clock, XCircle, LogOut } from 'lucide-react';
 
 // --- Auth Context ---
 interface AuthContextType {
@@ -124,6 +124,70 @@ const LoadingScreen: React.FC = () => (
   </div>
 );
 
+// --- Pending Approval Screen ---
+const PendingApprovalScreen: React.FC = () => {
+  const { user, logout, refreshProfile } = useAuth();
+  const [checking, setChecking] = useState(false);
+
+  const handleCheckStatus = async () => {
+    setChecking(true);
+    await refreshProfile();
+    setChecking(false);
+  };
+
+  const isPending = user?.accountStatus === 'PENDING';
+  const isRejected = user?.accountStatus === 'REJECTED';
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-slate-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl shadow-slate-100 p-10 border border-slate-100 text-center">
+        <div className={`w-20 h-20 ${isRejected ? 'bg-rose-50' : 'bg-amber-50'} rounded-[2rem] flex items-center justify-center mx-auto mb-6`}>
+          {isRejected ? <XCircle className="text-rose-500" size={40} /> : <Clock className="text-amber-500" size={40} />}
+        </div>
+
+        <h2 className="text-2xl font-black text-slate-800 tracking-tight mb-2">
+          {isRejected ? 'Account Rejected' : 'Approval Pending'}
+        </h2>
+
+        <p className="text-slate-400 text-sm font-bold mb-6">
+          {isRejected
+            ? 'Your account has been rejected by the admin. Please contact support.'
+            : 'Your account is under review. An admin will approve your documents shortly.'}
+        </p>
+
+        {isPending && (
+          <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100 mb-6 text-left">
+            <p className="text-amber-700 text-xs font-bold">📋 What happens next:</p>
+            <ul className="text-amber-600 text-xs font-medium mt-2 space-y-1 list-disc pl-4">
+              <li>Admin reviews your uploaded documents</li>
+              <li>You'll get access once approved</li>
+              <li>Check back in a few minutes</li>
+            </ul>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {isPending && (
+            <button
+              onClick={handleCheckStatus}
+              disabled={checking}
+              className="w-full bg-amber-500 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-amber-600 disabled:opacity-50 flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-200"
+            >
+              {checking ? <><RefreshCw className="animate-spin" size={16} /> CHECKING...</> : <><RefreshCw size={16} /> CHECK APPROVAL STATUS</>}
+            </button>
+          )}
+          <button
+            onClick={logout}
+            className="w-full bg-slate-100 text-slate-600 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-200 flex items-center justify-center gap-2 transition-all"
+          >
+            <LogOut size={16} /> SIGN OUT
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- Protected Route ---
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserRole[] }> = ({
   children,
@@ -132,6 +196,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserR
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace />;
+  if (user.accountStatus !== 'APPROVED') return <PendingApprovalScreen />;
   if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
   return <Layout>{children}</Layout>;
 };
@@ -208,6 +273,7 @@ const HomeDispatcher = () => {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace />;
+  if (user.accountStatus !== 'APPROVED') return <PendingApprovalScreen />;
   if (user.role === UserRole.ADMIN) return <Navigate to="/admin" replace />;
   if (user.role === UserRole.BLOOD_BANK) return <Navigate to="/inventory" replace />;
   return <Navigate to="/map" replace />;
@@ -239,7 +305,7 @@ const App: React.FC = () => {
           <Route path="/map" element={<ProtectedRoute allowedRoles={[UserRole.USER, UserRole.ADMIN, UserRole.BLOOD_BANK]}><LiveMap /></ProtectedRoute>} />
           <Route path="/emergency" element={<ProtectedRoute allowedRoles={[UserRole.USER]}><EmergencyPanel /></ProtectedRoute>} />
           <Route path="/history" element={<ProtectedRoute allowedRoles={[UserRole.USER]}><DonationHistory /></ProtectedRoute>} />
-          <Route path="/admin" element={<ProtectedRoute allowedRoles={[UserRole.ADMIN]}><AnalyticsDashboard /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute allowedRoles={[UserRole.ADMIN]}><AdminPanel /></ProtectedRoute>} />
           <Route path="/inventory" element={<ProtectedRoute allowedRoles={[UserRole.BLOOD_BANK]}><InventoryManager /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

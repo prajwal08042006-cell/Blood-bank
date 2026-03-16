@@ -19,7 +19,10 @@ export interface UserDocument {
   name: string;
   status: 'VERIFIED' | 'PENDING' | 'REJECTED';
   uploadDate: string;
+  data?: string; // base64 encoded file data
 }
+
+export type AccountStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export interface UserProfile {
   id: string;
@@ -40,6 +43,8 @@ export interface UserProfile {
     points: number;
   }[];
   stock?: Record<BloodGroup, number>; // Added for Blood Bank users
+  accountStatus: AccountStatus; // Admin approval status
+  licenseNumber?: string; // Blood Bank only
 }
 
 export interface BloodBank {
