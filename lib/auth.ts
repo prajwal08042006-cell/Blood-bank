@@ -1,93 +1,86 @@
 import {
-  sendSignInLinkToEmail,
-  isSignInWithEmailLink,
-  signInWithEmailLink,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendEmailVerification,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   User,
-  ActionCodeSettings,
 } from 'firebase/auth';
 import { auth } from './firebase';
 import { logger } from './logger';
 
-const EMAIL_KEY = 'bloodlife_signin_email';
-
 /**
- * Get the action code settings for email link sign-in.
- * The URL must be whitelisted in Firebase Console → Authentication → Settings → Authorized domains.
+ * Sign up a new user with email and password.
+ * Sends a verification email after account creation.
+ * Returns the Firebase User (emailVerified will be false until they click the link).
  */
-const getActionCodeSettings = (): ActionCodeSettings => ({
-  url: window.location.origin + '/#/login',
-  handleCodeInApp: true,
-});
-
-/**
- * Send a sign-in link to the user's email.
- */
-export const sendSignInLink = async (email: string): Promise<boolean> => {
+export const signUp = async (email: string, password: string): Promise<User> => {
   try {
-    await sendSignInLinkToEmail(auth, email, getActionCodeSettings());
-    // Save the email locally so we can complete sign-in when user clicks the link
-    window.localStorage.setItem(EMAIL_KEY, email);
-    return true;
+    const credential = await createUserWithEmailAndPassword(auth, email, password);
+    // Send verification email
+    await sendEmailVerification(credential.user);
+    return credential.user;
   } catch (error: unknown) {
     const firebaseError = error as { code?: string; message?: string };
-    logger.error('Failed to send sign-in link:', firebaseError.message);
+    logger.error('Sign up failed:', firebaseError.message);
     throw new Error(
-      firebaseError.code === 'auth/invalid-email'
-        ? 'Invalid email address. Please check and try again.'
-        : firebaseError.code === 'auth/missing-email'
-        ? 'Please enter your email address.'
-        : 'Failed to send verification email. Please try again.'
-    );
-  }
-};
-
-/**
- * Complete email link sign-in.
- * Call this when the app loads to check if user arrived via an email link.
- * Returns the authenticated User on success, null if not an email link.
- */
-export const completeSignIn = async (url: string): Promise<User | null> => {
-  if (!isSignInWithEmailLink(auth, url)) {
-    return null;
-  }
-
-  // Get the email from localStorage (saved when we sent the link)
-  let email = window.localStorage.getItem(EMAIL_KEY);
-
-  // If no email in storage (e.g., different device), prompt the user
-  if (!email) {
-    email = window.prompt('Please enter the email you used to sign in:');
-  }
-
-  if (!email) {
-    throw new Error('Email is required to complete sign-in.');
-  }
-
-  try {
-    const result = await signInWithEmailLink(auth, email, url);
-    // Clear the stored email
-    window.localStorage.removeItem(EMAIL_KEY);
-    return result.user;
-  } catch (error: unknown) {
-    const firebaseError = error as { code?: string; message?: string };
-    logger.error('Email link sign-in failed:', firebaseError.message);
-    throw new Error(
-      firebaseError.code === 'auth/invalid-action-code'
-        ? 'This link has expired or already been used. Please request a new one.'
+      firebaseError.code === 'auth/email-already-in-use'
+        ? 'This email is already registered. Please log in instead.'
         : firebaseError.code === 'auth/invalid-email'
-        ? 'Email mismatch. Please use the same email you signed in with.'
-        : 'Sign-in failed. Please try again.'
+        ? 'Invalid email address.'
+        : firebaseError.code === 'auth/weak-password'
+        ? 'Password must be at least 6 characters.'
+        : 'Sign up failed. Please try again.'
     );
   }
 };
 
 /**
- * Check if the current URL is a sign-in link.
+ * Log in an existing user with email and password.
+ * Checks if email is verified before allowing access.
  */
-export const isEmailSignInLink = (url: string): boolean => {
-  return isSignInWithEmailLink(auth, url);
+export const logIn = async (email: string, password: string): Promise<User> => {
+  try {
+    const credential = await signInWithEmailAndPassword(auth, email, password);
+    
+    if (!credential.user.emailVerified) {
+      // Resend verification email
+      await sendEmailVerification(credential.user);
+      await firebaseSignOut(auth);
+      throw new Error('EMAIL_NOT_VERIFIED');
+    }
+    
+    return credential.user;
+  } catch (error: unknown) {
+    const firebaseError = error as { code?: string; message?: string };
+    
+    if (firebaseError.message === 'EMAIL_NOT_VERIFIED') {
+      throw new Error('Please verify your email first. A new verification link has been sent to your inbox.');
+    }
+    
+    logger.error('Login failed:', firebaseError.message);
+    throw new Error(
+      firebaseError.code === 'auth/user-not-found'
+        ? 'No account found with this email. Please sign up.'
+        : firebaseError.code === 'auth/wrong-password'
+        ? 'Incorrect password. Please try again.'
+        : firebaseError.code === 'auth/invalid-credential'
+        ? 'Invalid email or password.'
+        : firebaseError.code === 'auth/too-many-requests'
+        ? 'Too many failed attempts. Please try again later.'
+        : 'Login failed. Please try again.'
+    );
+  }
+};
+
+/**
+ * Resend verification email to the current user.
+ */
+export const resendVerification = async (): Promise<void> => {
+  const user = auth.currentUser;
+  if (user && !user.emailVerified) {
+    await sendEmailVerification(user);
+  }
 };
 
 /**
