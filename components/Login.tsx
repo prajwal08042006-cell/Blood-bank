@@ -1,54 +1,47 @@
 import React, { useState } from 'react';
-import { Droplet, Shield, Mail, Loader2, UserPlus, ChevronDown, Lock, LogIn, CheckCircle, Eye, EyeOff } from 'lucide-react';
+import { Droplet, ShieldCheck, Mail, Loader2, Lock, Eye, EyeOff, ArrowLeft, CheckCircle, UserPlus } from 'lucide-react';
 import { BloodGroup, UserRole } from '../types';
 import { signUp, logIn } from '../lib/auth';
 import { createUserProfile, getUserProfile } from '../services/firestoreService';
 import { useNavigate } from 'react-router-dom';
 import { logger } from '../lib/logger';
 
-type AuthMode = 'login' | 'signup';
+type View = 'login' | 'register' | 'verify-email';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
 
-  const [mode, setMode] = useState<AuthMode>('login');
+  const [view, setView] = useState<View>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  // Sign-up specific fields
-  const [regName, setRegName] = useState('');
-  const [regBloodGroup, setRegBloodGroup] = useState<BloodGroup>('O+');
   const [role, setRole] = useState<UserRole>(UserRole.USER);
 
-  // Handle Login
+  // Registration fields
+  const [regName, setRegName] = useState('');
+  const [regBloodGroup, setRegBloodGroup] = useState<BloodGroup>('O+');
+
+  const clearError = () => setError('');
+
+  // ========== LOGIN ==========
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    if (!email || !password) {
-      setError('Please fill in all fields');
-      return;
-    }
+    clearError();
+    if (!email || !password) { setError('Please fill in all fields'); return; }
 
     setIsLoading(true);
     try {
       const fbUser = await logIn(email, password);
-
-      // Check if profile exists
       const profile = await getUserProfile(fbUser.uid);
       if (profile) {
         navigate('/');
       } else {
-        // Edge case: auth exists but no Firestore profile — switch to signup to complete registration
-        setMode('signup');
-        setError('Please complete your profile registration.');
+        setView('register');
+        setError('Complete your profile to continue.');
       }
     } catch (err: unknown) {
       setError((err as Error).message);
@@ -57,30 +50,18 @@ const Login: React.FC = () => {
     }
   };
 
-  // Handle Sign Up
+  // ========== SIGN UP ==========
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    if (!regName.trim()) {
-      setError('Name is required');
-      return;
-    }
-    if (!email) {
-      setError('Email is required');
-      return;
-    }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
+    clearError();
+    if (!regName.trim()) { setError('Name is required'); return; }
+    if (!email) { setError('Email is required'); return; }
+    if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
 
     setIsLoading(true);
     try {
       const fbUser = await signUp(email, password);
 
-      // Create Firestore profile
       await createUserProfile(fbUser.uid, {
         name: regName.trim(),
         phone: '',
@@ -89,9 +70,8 @@ const Login: React.FC = () => {
         role: role,
       });
 
-      setSuccess('Account created! A verification email has been sent to ' + email + '. Please verify your email and then log in.');
-      setMode('login');
-      setPassword('');
+      // Show verification screen
+      setView('verify-email');
     } catch (err: unknown) {
       setError((err as Error).message);
     } finally {
@@ -100,96 +80,76 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFDFF] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+
         {/* Logo */}
-        <div className="text-center mb-10">
-          <div className="flex items-center justify-center gap-4 mb-3">
-            <div className="w-16 h-16 bg-rose-600 rounded-[1.5rem] flex items-center justify-center shadow-2xl shadow-rose-200 animate-pulse">
-              <Droplet className="text-white" size={30} />
+        <div className="text-center mb-8">
+          <div className="relative inline-block mb-3">
+            <div className="w-20 h-20 bg-gradient-to-br from-rose-500 to-rose-700 rounded-[2rem] flex items-center justify-center shadow-2xl shadow-rose-200 mx-auto">
+              <Droplet className="text-white" size={38} />
+            </div>
+            <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg border-2 border-rose-100">
+              <ShieldCheck className="text-rose-500" size={16} />
             </div>
           </div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tighter">
-            BLOOD<span className="text-rose-600">LIFE</span>
+          <h1 className="text-3xl font-black tracking-tighter">
+            <span className="text-slate-800">BloodLife</span>
+            <span className="text-rose-600"> KA</span>
           </h1>
-          <p className="text-slate-400 font-bold text-[11px] tracking-[0.3em] mt-1">
-            KARNATAKA EMERGENCY NETWORK
+          <p className="text-slate-400 font-bold text-[10px] tracking-[0.4em] mt-1 uppercase">
+            Bengaluru Emergency Portal
           </p>
         </div>
 
-        {/* Card */}
-        <div className="bg-white rounded-[3rem] shadow-2xl shadow-slate-100 p-10 border border-slate-100">
-          {/* Tab Switcher */}
-          <div className="flex mb-8 bg-slate-100 rounded-2xl p-1">
-            <button
-              type="button"
-              onClick={() => { setMode('login'); setError(''); }}
-              className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                mode === 'login'
-                  ? 'bg-white text-slate-800 shadow-md'
-                  : 'text-slate-400 hover:text-slate-600'
-              }`}
-            >
-              Log In
-            </button>
-            <button
-              type="button"
-              onClick={() => { setMode('signup'); setError(''); }}
-              className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                mode === 'signup'
-                  ? 'bg-white text-slate-800 shadow-md'
-                  : 'text-slate-400 hover:text-slate-600'
-              }`}
-            >
-              Sign Up
-            </button>
-          </div>
-
-          {/* Success Message */}
-          {success && (
-            <div className="bg-emerald-50 text-emerald-700 p-4 rounded-2xl border border-emerald-100 mb-6 flex items-start gap-3">
-              <CheckCircle size={20} className="mt-0.5 flex-shrink-0" />
-              <p className="text-xs font-bold">{success}</p>
+        {/* ========== LOGIN VIEW ========== */}
+        {view === 'login' && (
+          <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-100 p-10 border border-slate-100">
+            {/* Role Tabs */}
+            <div className="flex bg-slate-50 rounded-2xl p-1.5 mb-8 border border-slate-100">
+              {[
+                { value: UserRole.USER, label: 'USER' },
+                { value: UserRole.BLOOD_BANK, label: 'BLOOD_BANK' },
+                { value: UserRole.ADMIN, label: 'ADMIN' },
+              ].map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => { setRole(value); clearError(); }}
+                  className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    role === value
+                      ? 'bg-white text-slate-800 shadow-md'
+                      : 'text-slate-400 hover:text-slate-500'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-          )}
 
-          {/* ========== LOGIN FORM ========== */}
-          {mode === 'login' && (
-            <form onSubmit={handleLogin} className="space-y-6 animate-in fade-in duration-300">
-              <div className="text-center mb-4">
-                <div className="w-16 h-16 bg-blue-50 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4">
-                  <LogIn className="text-blue-600" size={28} />
-                </div>
-                <h2 className="text-xl font-black text-slate-800 tracking-tight">Welcome Back</h2>
-                <p className="text-slate-400 text-xs font-bold mt-1">Log in to your verified account</p>
-              </div>
-
+            <form onSubmit={handleLogin} className="space-y-5">
               {/* Email */}
               <div>
-                <label htmlFor="login-email" className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 block">
-                  Email Address
+                <label htmlFor="login-email" className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2 block">
+                  Account Identifier
                 </label>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                  <input
-                    id="login-email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="yourname@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-slate-50 rounded-2xl pl-12 pr-6 py-4 text-slate-800 font-bold border-2 border-slate-100 focus:border-rose-400 focus:ring-4 focus:ring-rose-400/10 outline-none transition-all"
-                  />
-                </div>
+                <input
+                  id="login-email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="email@address.in"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-slate-50 rounded-2xl px-5 py-4 text-slate-800 font-semibold border-2 border-slate-100 focus:border-rose-400 focus:ring-4 focus:ring-rose-400/10 outline-none transition-all placeholder:text-slate-300"
+                />
               </div>
 
               {/* Password */}
               <div>
-                <label htmlFor="login-password" className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 block">
-                  Password
+                <label htmlFor="login-password" className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2 block">
+                  Encrypted Password
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                   <input
                     id="login-password"
                     type={showPassword ? 'text' : 'password'}
@@ -197,12 +157,13 @@ const Login: React.FC = () => {
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-slate-50 rounded-2xl pl-12 pr-14 py-4 text-slate-800 font-bold border-2 border-slate-100 focus:border-rose-400 focus:ring-4 focus:ring-rose-400/10 outline-none transition-all"
+                    className="w-full bg-slate-50 rounded-2xl px-5 pr-14 py-4 text-slate-800 font-semibold border-2 border-slate-100 focus:border-rose-400 focus:ring-4 focus:ring-rose-400/10 outline-none transition-all placeholder:text-slate-300"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
@@ -211,8 +172,8 @@ const Login: React.FC = () => {
 
               {/* Error */}
               {error && (
-                <div className="bg-rose-50 text-rose-600 p-4 rounded-2xl border border-rose-100 text-center">
-                  <p className="text-[11px] font-black uppercase">{error}</p>
+                <div className="bg-rose-50 text-rose-600 p-3 rounded-2xl border border-rose-100 text-center">
+                  <p className="text-[10px] font-black uppercase">{error}</p>
                 </div>
               )}
 
@@ -220,105 +181,124 @@ const Login: React.FC = () => {
               <button
                 type="submit"
                 disabled={isLoading || !email || !password}
-                className="w-full bg-rose-600 text-white py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.3em] hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3 transition-all shadow-xl shadow-rose-200 active:scale-[0.98]"
+                className="w-full bg-gradient-to-r from-rose-500 to-rose-600 text-white py-4.5 rounded-2xl font-black text-xs uppercase tracking-[0.25em] hover:from-rose-600 hover:to-rose-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-xl shadow-rose-200 active:scale-[0.98]"
               >
                 {isLoading ? (
-                  <><Loader2 className="animate-spin" size={18} /> LOGGING IN...</>
+                  <><Loader2 className="animate-spin" size={16} /> AUTHENTICATING...</>
                 ) : (
-                  <><LogIn size={18} /> LOG IN</>
+                  'INITIALIZE ACCESS'
                 )}
               </button>
             </form>
-          )}
 
-          {/* ========== SIGN UP FORM ========== */}
-          {mode === 'signup' && (
-            <form onSubmit={handleSignUp} className="space-y-5 animate-in fade-in duration-300">
-              <div className="text-center mb-4">
-                <div className="w-16 h-16 bg-emerald-50 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4">
-                  <UserPlus className="text-emerald-600" size={28} />
-                </div>
-                <h2 className="text-xl font-black text-slate-800 tracking-tight">Create Account</h2>
-                <p className="text-slate-400 text-xs font-bold mt-1">A verification email will be sent to activate your account</p>
+            {/* Create Account Link */}
+            <div className="mt-6 text-center">
+              <button
+                type="button"
+                onClick={() => { setView('register'); clearError(); }}
+                className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] hover:text-rose-700 transition-colors"
+              >
+                New to BloodLife? Create Account
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========== REGISTER VIEW ========== */}
+        {view === 'register' && (
+          <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-100 p-10 border border-slate-100">
+            {/* Back Button */}
+            <button
+              type="button"
+              onClick={() => { setView('login'); clearError(); }}
+              className="flex items-center gap-1.5 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:text-slate-600 mb-6"
+            >
+              <ArrowLeft size={14} /> Back to Login
+            </button>
+
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-emerald-50 rounded-[1.5rem] flex items-center justify-center mx-auto mb-3">
+                <UserPlus className="text-emerald-600" size={28} />
               </div>
+              <h2 className="text-xl font-black text-slate-800 tracking-tight">Create Account</h2>
+              <p className="text-slate-400 text-[11px] font-bold mt-1">A verification email will be sent for OTP confirmation</p>
+            </div>
 
-              {/* Role Selection */}
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { value: UserRole.USER, label: 'Donor' },
-                  { value: UserRole.BLOOD_BANK, label: 'Blood Bank' },
-                  { value: UserRole.ADMIN, label: 'Admin' },
-                ].map(({ value, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setRole(value)}
-                    className={`py-2.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 ${
-                      role === value
-                        ? 'bg-rose-600 text-white border-rose-600 shadow-lg shadow-rose-200'
-                        : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-slate-200'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+            {/* Role Selection */}
+            <div className="flex bg-slate-50 rounded-2xl p-1.5 mb-6 border border-slate-100">
+              {[
+                { value: UserRole.USER, label: 'USER' },
+                { value: UserRole.BLOOD_BANK, label: 'BLOOD_BANK' },
+                { value: UserRole.ADMIN, label: 'ADMIN' },
+              ].map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setRole(value)}
+                  className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    role === value
+                      ? 'bg-white text-slate-800 shadow-md'
+                      : 'text-slate-400 hover:text-slate-500'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
 
-              {/* Name */}
+            <form onSubmit={handleSignUp} className="space-y-4">
+              {/* Full Name */}
               <div>
-                <label htmlFor="signup-name" className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 block">
-                  Full Name *
+                <label htmlFor="reg-name" className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2 block">
+                  Legal Full Name
                 </label>
                 <input
-                  id="signup-name"
+                  id="reg-name"
                   type="text"
                   autoComplete="name"
                   placeholder="Your full name"
                   value={regName}
                   onChange={(e) => setRegName(e.target.value)}
-                  className="w-full bg-slate-50 rounded-2xl px-6 py-3.5 text-slate-800 font-bold border-2 border-slate-100 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/10 outline-none transition-all"
+                  className="w-full bg-slate-50 rounded-2xl px-5 py-3.5 text-slate-800 font-semibold border-2 border-slate-100 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/10 outline-none transition-all placeholder:text-slate-300"
                 />
               </div>
 
               {/* Email */}
               <div>
-                <label htmlFor="signup-email" className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 block">
-                  Email Address *
+                <label htmlFor="reg-email" className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2 block">
+                  Email Address (OTP will be sent here)
                 </label>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                  <input
-                    id="signup-email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="yourname@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-slate-50 rounded-2xl pl-12 pr-6 py-3.5 text-slate-800 font-bold border-2 border-slate-100 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/10 outline-none transition-all"
-                  />
-                </div>
+                <input
+                  id="reg-email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="email@address.in"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-slate-50 rounded-2xl px-5 py-3.5 text-slate-800 font-semibold border-2 border-slate-100 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/10 outline-none transition-all placeholder:text-slate-300"
+                />
               </div>
 
               {/* Password */}
               <div>
-                <label htmlFor="signup-password" className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 block">
-                  Password * (min 6 characters)
+                <label htmlFor="reg-password" className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2 block">
+                  Create Password (min 6 chars)
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                   <input
-                    id="signup-password"
+                    id="reg-password"
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="new-password"
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-slate-50 rounded-2xl pl-12 pr-14 py-3.5 text-slate-800 font-bold border-2 border-slate-100 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/10 outline-none transition-all"
+                    className="w-full bg-slate-50 rounded-2xl px-5 pr-14 py-3.5 text-slate-800 font-semibold border-2 border-slate-100 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/10 outline-none transition-all placeholder:text-slate-300"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
@@ -327,28 +307,25 @@ const Login: React.FC = () => {
 
               {/* Blood Group */}
               <div>
-                <label htmlFor="signup-blood-group" className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 block">
-                  Blood Group *
+                <label htmlFor="reg-blood" className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2 block">
+                  Blood Classification
                 </label>
-                <div className="relative">
-                  <select
-                    id="signup-blood-group"
-                    value={regBloodGroup}
-                    onChange={(e) => setRegBloodGroup(e.target.value as BloodGroup)}
-                    className="w-full bg-slate-50 rounded-2xl px-6 py-3.5 text-slate-800 font-bold border-2 border-slate-100 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/10 outline-none transition-all appearance-none"
-                  >
-                    {BLOOD_GROUPS.map((bg) => (
-                      <option key={bg} value={bg}>{bg}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
-                </div>
+                <select
+                  id="reg-blood"
+                  value={regBloodGroup}
+                  onChange={(e) => setRegBloodGroup(e.target.value as BloodGroup)}
+                  className="w-full bg-slate-50 rounded-2xl px-5 py-3.5 text-slate-800 font-semibold border-2 border-slate-100 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-400/10 outline-none transition-all appearance-none"
+                >
+                  {BLOOD_GROUPS.map((bg) => (
+                    <option key={bg} value={bg}>{bg}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Error */}
               {error && (
-                <div className="bg-rose-50 text-rose-600 p-4 rounded-2xl border border-rose-100 text-center">
-                  <p className="text-[11px] font-black uppercase">{error}</p>
+                <div className="bg-rose-50 text-rose-600 p-3 rounded-2xl border border-rose-100 text-center">
+                  <p className="text-[10px] font-black uppercase">{error}</p>
                 </div>
               )}
 
@@ -356,22 +333,56 @@ const Login: React.FC = () => {
               <button
                 type="submit"
                 disabled={isLoading || !regName.trim() || !email || password.length < 6}
-                className="w-full bg-emerald-600 text-white py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.3em] hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3 transition-all shadow-xl shadow-emerald-200 active:scale-[0.98]"
+                className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white py-4.5 rounded-2xl font-black text-xs uppercase tracking-[0.25em] hover:from-emerald-600 hover:to-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-xl shadow-emerald-200 active:scale-[0.98]"
               >
                 {isLoading ? (
-                  <><Loader2 className="animate-spin" size={18} /> CREATING ACCOUNT...</>
+                  <><Loader2 className="animate-spin" size={16} /> CREATING...</>
                 ) : (
-                  <><Shield size={18} /> SIGN UP &amp; VERIFY EMAIL</>
+                  'CREATE ACCOUNT & SEND OTP'
                 )}
               </button>
             </form>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Footer */}
-        <p className="text-center text-slate-300 text-[10px] font-bold mt-8 tracking-widest uppercase">
-          Secured by Firebase Authentication
-        </p>
+        {/* ========== VERIFY EMAIL VIEW ========== */}
+        {view === 'verify-email' && (
+          <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-100 p-10 border border-slate-100 text-center">
+            <div className="w-20 h-20 bg-emerald-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
+              <Mail className="text-emerald-600" size={36} />
+            </div>
+            <h2 className="text-2xl font-black text-slate-800 tracking-tight mb-2">Verify Your Email</h2>
+            <p className="text-slate-400 text-sm font-bold mb-2">We sent a verification link to</p>
+            <p className="text-slate-800 font-black text-lg mb-6">{email}</p>
+
+            <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 mb-6 text-left space-y-2">
+              <p className="text-blue-700 text-sm font-bold">📩 Steps to complete:</p>
+              <ol className="text-blue-600 text-xs font-medium space-y-1 list-decimal pl-4">
+                <li>Open your email inbox</li>
+                <li>Find the email from <strong>noreply@blood-bank-ad3a9.firebaseapp.com</strong></li>
+                <li>Click the verification link in the email</li>
+                <li>Come back here and log in with your credentials</li>
+              </ol>
+              <p className="text-blue-500 text-[10px] font-bold mt-2">💡 Check your spam/junk folder if you don't see it</p>
+            </div>
+
+            <div className="flex items-center gap-3 p-4 bg-emerald-50 rounded-2xl border border-emerald-100 mb-6">
+              <CheckCircle className="text-emerald-600 flex-shrink-0" size={20} />
+              <p className="text-emerald-700 text-xs font-bold text-left">
+                Account created! You must verify your email before you can log in.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => { setView('login'); setPassword(''); clearError(); }}
+              className="w-full bg-gradient-to-r from-rose-500 to-rose-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-[0.25em] hover:from-rose-600 hover:to-rose-700 transition-all shadow-xl shadow-rose-200 active:scale-[0.98]"
+            >
+              GO TO LOGIN
+            </button>
+          </div>
+        )}
+
       </div>
     </div>
   );
