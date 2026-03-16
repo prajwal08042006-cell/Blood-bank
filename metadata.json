@@ -1,0 +1,7 @@
+{
+  "name": "Copy of BloodLife AI - Emergency Blood Management",
+  "description": "A comprehensive, intelligent, location-based blood donor finder and emergency management system using AI for matching and real-time coordination.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
