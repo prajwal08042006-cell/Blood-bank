@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { Droplet, ShieldCheck, Mail, Loader2, Lock, Eye, EyeOff, ArrowLeft, CheckCircle, UserPlus, FileText, Upload, Building2, MapPin } from 'lucide-react';
+import { Droplet, ShieldCheck, Mail, Loader2, Lock, Eye, EyeOff, ArrowLeft, CheckCircle, UserPlus, FileText, Upload, Building2, MapPin, Shield } from 'lucide-react';
 import { BloodGroup, UserRole } from '../types';
 import { signUp, logIn } from '../lib/auth';
 import { createUserProfile, getUserProfile } from '../services/firestoreService';
 import { useNavigate } from 'react-router-dom';
 import { logger } from '../lib/logger';
 
-type View = 'login' | 'register-donor' | 'register-bank' | 'verify-email';
+type View = 'login' | 'admin-login' | 'register-donor' | 'register-bank' | 'verify-email';
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
@@ -327,12 +327,71 @@ const Login: React.FC = () => {
               </button>
             </form>
 
-            <div className="mt-6 text-center">
+            <div className="mt-6 text-center space-y-2">
               <button type="button" onClick={() => { setView('register-donor'); clearError(); }}
-                className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] hover:text-rose-700 transition-colors">
+                className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] hover:text-rose-700 transition-colors block w-full">
                 New to BloodLife? Create Account
               </button>
+              <button type="button" onClick={() => { setView('admin-login'); clearError(); setEmail(''); setPassword(''); }}
+                className="text-[9px] font-bold text-slate-300 uppercase tracking-[0.15em] hover:text-slate-500 transition-colors">
+                🔒 Admin Access
+              </button>
             </div>
+          </div>
+        )}
+
+        {/* ========== ADMIN LOGIN VIEW ========== */}
+        {view === 'admin-login' && (
+          <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-100 p-10 border border-slate-100">
+            <button type="button" onClick={() => { setView('login'); clearError(); setEmail(''); setPassword(''); }}
+              className="flex items-center gap-1.5 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:text-slate-600 mb-6">
+              <ArrowLeft size={14} /> Back to Login
+            </button>
+
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-violet-50 rounded-[1.5rem] flex items-center justify-center mx-auto mb-3">
+                <Shield className="text-violet-600" size={28} />
+              </div>
+              <h2 className="text-xl font-black text-slate-800 tracking-tight">Admin Access</h2>
+              <p className="text-slate-400 text-[11px] font-bold mt-1">Authorized personnel only</p>
+            </div>
+
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div>
+                <label htmlFor="admin-email" className="text-[10px] font-black text-violet-600 uppercase tracking-[0.2em] mb-2 block">
+                  Admin Email
+                </label>
+                <input id="admin-email" type="email" autoComplete="email" placeholder="admin@bloodlife.in" value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-slate-50 rounded-2xl px-5 py-4 text-slate-800 font-semibold border-2 border-slate-100 focus:border-violet-400 focus:ring-4 focus:ring-violet-400/10 outline-none transition-all placeholder:text-slate-300" />
+              </div>
+
+              <div>
+                <label htmlFor="admin-password" className="text-[10px] font-black text-violet-600 uppercase tracking-[0.2em] mb-2 block">
+                  Admin Password
+                </label>
+                <div className="relative">
+                  <input id="admin-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="••••••••" value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-slate-50 rounded-2xl px-5 pr-14 py-4 text-slate-800 font-semibold border-2 border-slate-100 focus:border-violet-400 focus:ring-4 focus:ring-violet-400/10 outline-none transition-all placeholder:text-slate-300" />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500" aria-label="Toggle password">
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <div className="bg-rose-50 text-rose-600 p-3 rounded-2xl border border-rose-100 text-center">
+                  <p className="text-[10px] font-black uppercase">{error}</p>
+                </div>
+              )}
+
+              <button type="submit" disabled={isLoading || !email || !password}
+                className="w-full bg-gradient-to-r from-violet-500 to-violet-600 text-white py-5 rounded-2xl font-black text-sm uppercase tracking-[0.25em] hover:from-violet-600 hover:to-violet-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-xl shadow-violet-200 active:scale-[0.98]">
+                {isLoading ? <><Loader2 className="animate-spin" size={16} /> AUTHENTICATING...</> : <><Shield size={16} /> ADMIN LOGIN</>}
+              </button>
+            </form>
           </div>
         )}
 
