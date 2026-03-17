@@ -84,7 +84,7 @@ const Login: React.FC = () => {
       }
 
       if (profile) {
-        navigate(profile.role === UserRole.ADMIN ? '/admin' : '/');
+        window.location.href = profile.role === UserRole.ADMIN ? '#/admin' : '#/';
       } else {
         setView('register-donor');
         setError('Complete your profile to continue.');
