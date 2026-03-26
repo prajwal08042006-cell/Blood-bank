@@ -40,6 +40,9 @@ const Login: React.FC = () => {
 
   const clearError = () => setError('');
 
+  // Maximum file size: 1MB
+  const MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024; // 1MB
+
   // Convert file to base64
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -231,7 +234,16 @@ const Login: React.FC = () => {
           type="file"
           accept="image/*,.pdf"
           className="hidden"
-          onChange={(e) => onFileChange(e.target.files?.[0] || null)}
+          onChange={(e) => {
+            const selectedFile = e.target.files?.[0] || null;
+            if (selectedFile && selectedFile.size > MAX_FILE_SIZE_BYTES) {
+              setError(`File "${selectedFile.name}" exceeds 1MB limit (${(selectedFile.size / 1024 / 1024).toFixed(2)}MB). Please upload a smaller file.`);
+              e.target.value = '';
+              return;
+            }
+            clearError();
+            onFileChange(selectedFile);
+          }}
         />
         {file ? (
           <div className="flex items-center gap-3">
@@ -248,7 +260,7 @@ const Login: React.FC = () => {
           <div className="py-2">
             <Upload className="mx-auto text-slate-300 mb-2" size={24} />
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{hint}</p>
-            <p className="text-[9px] text-slate-300 mt-1">JPG, PNG, PDF up to 5MB</p>
+            <p className="text-[9px] text-slate-300 mt-1">JPG, PNG, PDF up to 1MB</p>
           </div>
         )}
       </div>
