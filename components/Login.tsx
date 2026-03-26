@@ -3,6 +3,7 @@ import { Droplet, ShieldCheck, Mail, Loader2, Lock, Eye, EyeOff, ArrowLeft, Chec
 import { BloodGroup, UserRole } from '../types';
 import { signUp, logIn } from '../lib/auth';
 import { createUserProfile, getUserProfile } from '../services/firestoreService';
+import { uploadUserDocument } from '../services/storageService';
 import { db } from '../lib/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
@@ -43,15 +44,7 @@ const Login: React.FC = () => {
   // Maximum file size: 1MB
   const MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024; // 1MB
 
-  // Convert file to base64
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = (err) => reject(err);
-    });
-  };
+  // Files are now uploaded to Firebase Storage via storageService
 
   // ========== LOGIN ==========
   const handleLogin = async (e: React.FormEvent) => {
@@ -112,12 +105,11 @@ const Login: React.FC = () => {
 
     setIsLoading(true);
     try {
-      let idProofData = '';
-      let medCertData = '';
-      if (idProofFile) idProofData = await fileToBase64(idProofFile);
-      if (medCertFile) medCertData = await fileToBase64(medCertFile);
-
       const fbUser = await signUp(email, password);
+
+      // Upload files to Firebase Storage (not base64 in Firestore)
+      const idProofUrl = await uploadUserDocument(fbUser.uid, idProofFile);
+      const medCertUrl = await uploadUserDocument(fbUser.uid, medCertFile);
 
       await createUserProfile(fbUser.uid, {
         name: regName.trim(),
@@ -132,7 +124,7 @@ const Login: React.FC = () => {
             name: idProofFile.name,
             status: 'PENDING' as const,
             uploadDate: new Date().toISOString(),
-            data: idProofData,
+            data: idProofUrl,
           },
           {
             id: `med_${Date.now() + 1}`,
@@ -140,7 +132,7 @@ const Login: React.FC = () => {
             name: medCertFile.name,
             status: 'PENDING' as const,
             uploadDate: new Date().toISOString(),
-            data: medCertData,
+            data: medCertUrl,
           },
         ],
       });
@@ -168,12 +160,11 @@ const Login: React.FC = () => {
 
     setIsLoading(true);
     try {
-      let licenseData = '';
-      let accreditationData = '';
-      if (licenseFile) licenseData = await fileToBase64(licenseFile);
-      if (accreditationFile) accreditationData = await fileToBase64(accreditationFile);
-
       const fbUser = await signUp(email, password);
+
+      // Upload files to Firebase Storage (not base64 in Firestore)
+      const licenseUrl = await uploadUserDocument(fbUser.uid, licenseFile);
+      const accreditationUrl = await uploadUserDocument(fbUser.uid, accreditationFile);
 
       await createUserProfile(fbUser.uid, {
         name: bankName.trim(),
@@ -190,7 +181,7 @@ const Login: React.FC = () => {
             name: licenseFile.name,
             status: 'PENDING' as const,
             uploadDate: new Date().toISOString(),
-            data: licenseData,
+            data: licenseUrl,
           },
           {
             id: `acc_${Date.now() + 1}`,
@@ -198,7 +189,7 @@ const Login: React.FC = () => {
             name: accreditationFile.name,
             status: 'PENDING' as const,
             uploadDate: new Date().toISOString(),
-            data: accreditationData,
+            data: accreditationUrl,
           },
         ],
       });
