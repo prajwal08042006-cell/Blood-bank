@@ -17,8 +17,13 @@ import { logger } from './logger';
 export const signUp = async (email: string, password: string): Promise<User> => {
   try {
     const credential = await createUserWithEmailAndPassword(auth, email, password);
-    // Send verification email
-    await sendEmailVerification(credential.user);
+    // Send verification email — wrapped in try/catch so a verification
+    // failure doesn't block the entire sign-up flow.
+    try {
+      await sendEmailVerification(credential.user);
+    } catch (verifyErr) {
+      logger.error('Verification email failed (non-blocking):', verifyErr);
+    }
     return credential.user;
   } catch (error: unknown) {
     const firebaseError = error as { code?: string; message?: string };
@@ -30,6 +35,8 @@ export const signUp = async (email: string, password: string): Promise<User> => 
         ? 'Invalid email address.'
         : firebaseError.code === 'auth/weak-password'
         ? 'Password must be at least 6 characters.'
+        : firebaseError.code === 'auth/configuration-not-found'
+        ? 'Firebase Auth is not configured. Enable Email/Password sign-in in your Firebase Console.'
         : 'Sign up failed. Please try again.'
     );
   }
@@ -44,8 +51,12 @@ export const logIn = async (email: string, password: string): Promise<User> => {
     const credential = await signInWithEmailAndPassword(auth, email, password);
     
     if (!credential.user.emailVerified) {
-      // Resend verification email
-      await sendEmailVerification(credential.user);
+      // Resend verification email — wrapped so failure doesn't block the flow
+      try {
+        await sendEmailVerification(credential.user);
+      } catch (verifyErr) {
+        logger.error('Re-send verification email failed (non-blocking):', verifyErr);
+      }
       await firebaseSignOut(auth);
       throw new Error('EMAIL_NOT_VERIFIED');
     }
@@ -68,6 +79,8 @@ export const logIn = async (email: string, password: string): Promise<User> => {
         ? 'Invalid email or password.'
         : firebaseError.code === 'auth/too-many-requests'
         ? 'Too many failed attempts. Please try again later.'
+        : firebaseError.code === 'auth/configuration-not-found'
+        ? 'Firebase Auth is not configured. Enable Email/Password sign-in in your Firebase Console.'
         : 'Login failed. Please try again.'
     );
   }
@@ -92,8 +105,20 @@ export const signOutUser = async (): Promise<void> => {
 
 /**
  * Listen for auth state changes.
+ * Includes an error callback to gracefully handle token refresh failures
+ * (the 400 errors from identitytoolkit.googleapis.com).
  * Returns an unsubscribe function.
  */
 export const onAuthChange = (callback: (user: User | null) => void): (() => void) => {
-  return onAuthStateChanged(auth, callback);
+  return onAuthStateChanged(
+    auth,
+    callback,
+    (error) => {
+      // This error handler catches token refresh failures and other
+      // auth-state errors that would otherwise show as uncaught 400s.
+      logger.error('Auth state error (likely stale token):', error);
+      // Treat the error as "no user" — the login screen will show.
+      callback(null);
+    }
+  );
 };

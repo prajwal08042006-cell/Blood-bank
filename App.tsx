@@ -68,12 +68,15 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         try {
           const profile = await getUserProfile(fbUser.uid);
           setUser(profile);
-          // Seed blood bank data on first authenticated load
-          await seedBloodBanks();
         } catch (err) {
           logger.error('Failed to load profile:', err);
           setUser(null);
         }
+
+        // Seed blood bank data in background — never block the auth flow
+        seedBloodBanks().catch((err) => {
+          logger.warn('Blood bank seed skipped:', err);
+        });
       } else {
         setUser(null);
       }

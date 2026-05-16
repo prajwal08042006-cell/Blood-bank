@@ -1,7 +1,8 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { logger } from './logger';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -12,9 +13,28 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+// Validate that required Firebase config values are present
+const missingKeys = Object.entries(firebaseConfig)
+  .filter(([, value]) => !value)
+  .map(([key]) => key);
+
+if (missingKeys.length > 0) {
+  logger.error(
+    `Firebase config is missing required values: ${missingKeys.join(', ')}. ` +
+    'Check your .env.local file.'
+  );
+}
+
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+// Set auth persistence explicitly to prevent stale token refresh issues.
+// This ensures Firebase uses localStorage and gracefully handles invalid cached tokens.
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  logger.error('Failed to set auth persistence:', err);
+});
+
 export default app;
