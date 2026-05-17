@@ -92,14 +92,14 @@ const Login: React.FC = () => {
           email: fbUser.email,
           phone: '',
           bloodGroup: 'O+',
-          role: UserRole.USER,
+          role: role, // Use the role selected on the login form (USER or BLOOD_BANK)
           isAvailable: true,
           impactScore: 0,
           location: { lat: 12.9716, lng: 77.5946, address: 'Karnataka, India' },
           documents: [],
           donationHistory: [],
           accountStatus: 'APPROVED',
-          seedAccount: true, // Allow login without email verification
+          seedAccount: true,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
