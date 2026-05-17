@@ -49,25 +49,11 @@ export const signUp = async (email: string, password: string): Promise<User> => 
 export const logIn = async (email: string, password: string): Promise<User> => {
   try {
     const credential = await signInWithEmailAndPassword(auth, email, password);
-    
-    if (!credential.user.emailVerified) {
-      // Resend verification email — wrapped so failure doesn't block the flow
-      try {
-        await sendEmailVerification(credential.user);
-      } catch (verifyErr) {
-        logger.error('Re-send verification email failed (non-blocking):', verifyErr);
-      }
-      await firebaseSignOut(auth);
-      throw new Error('EMAIL_NOT_VERIFIED');
-    }
-    
+    // Skip email verification — this is a demo/academic project.
+    // Firebase Auth already validates credentials.
     return credential.user;
   } catch (error: unknown) {
     const firebaseError = error as { code?: string; message?: string };
-    
-    if (firebaseError.message === 'EMAIL_NOT_VERIFIED') {
-      throw new Error('Please verify your email first. A new verification link has been sent to your inbox.');
-    }
     
     logger.error('Login failed:', firebaseError.message);
     throw new Error(

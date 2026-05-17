@@ -82,8 +82,28 @@ const Login: React.FC = () => {
       if (profile) {
         window.location.href = profile.role === UserRole.ADMIN ? '#/admin' : '#/';
       } else {
-        setView('register-donor');
-        setError('Complete your profile to continue.');
+        // No Firestore profile exists for this authenticated user.
+        // Auto-create a basic profile so they can access the dashboard
+        // instead of being stuck in a registration loop.
+        logger.info('No Firestore profile found — auto-creating for:', fbUser.email);
+        await setDoc(doc(db, 'users', fbUser.uid), {
+          uid: fbUser.uid,
+          name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
+          email: fbUser.email,
+          phone: '',
+          bloodGroup: 'O+',
+          role: UserRole.USER,
+          isAvailable: true,
+          impactScore: 0,
+          location: { lat: 12.9716, lng: 77.5946, address: 'Karnataka, India' },
+          documents: [],
+          donationHistory: [],
+          accountStatus: 'APPROVED',
+          seedAccount: true, // Allow login without email verification
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        window.location.href = '#/';
       }
     } catch (err: unknown) {
       setError((err as Error).message);

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck, Users, CheckCircle, XCircle, FileText, Loader2, RefreshCw, Eye, Phone, Mail, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { UserProfile, UserRole } from '../types';
 import { getPendingUsers, approveUser, rejectUser } from '../services/firestoreService';
-import { clearAndSeedDatabase } from '../services/seedService';
+import { clearAndSeedDatabase, seedLoginableAccounts } from '../services/seedService';
 import { logger } from '../lib/logger';
 
 const AdminPanel: React.FC = () => {
@@ -11,6 +11,7 @@ const AdminPanel: React.FC = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [isSeeding, setIsSeeding] = useState(false);
+  const [isSeedingAccounts, setIsSeedingAccounts] = useState(false);
 
   const loadPendingUsers = useCallback(async () => {
     setIsLoading(true);
@@ -98,6 +99,33 @@ const AdminPanel: React.FC = () => {
           className="bg-red-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-700 disabled:opacity-50 flex items-center gap-2 transition-all shadow-lg shadow-red-200 whitespace-nowrap"
         >
           {isSeeding ? <><Loader2 size={16} className="animate-spin" /> SEEDING...</> : 'SEED DATABASE'}
+        </button>
+      </div>
+
+      {/* Seed Loginable Accounts */}
+      <div className="bg-emerald-50 border border-emerald-100 p-5 rounded-3xl flex items-center justify-between gap-4 mb-8">
+        <div>
+          <h3 className="text-emerald-800 font-bold">Create Demo Accounts</h3>
+          <p className="text-emerald-600 text-sm">Create real loginable accounts: <strong>donor@bloodlife.in</strong> / donor123 &amp; <strong>bank@bloodlife.in</strong> / bank1234</p>
+        </div>
+        <button
+          onClick={async () => {
+            setIsSeedingAccounts(true);
+            try {
+              const result = await seedLoginableAccounts();
+              const msg = [...result.success, ...result.failed].join('\n');
+              alert('Demo Account Results:\n\n' + msg);
+            } catch (err) {
+              console.error(err);
+              alert('Failed to create demo accounts. Check console.');
+            } finally {
+              setIsSeedingAccounts(false);
+            }
+          }}
+          disabled={isSeedingAccounts}
+          className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2 transition-all shadow-lg shadow-emerald-200 whitespace-nowrap"
+        >
+          {isSeedingAccounts ? <><Loader2 size={16} className="animate-spin" /> CREATING...</> : 'CREATE DEMO ACCOUNTS'}
         </button>
       </div>
 

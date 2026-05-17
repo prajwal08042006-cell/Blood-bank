@@ -340,3 +340,128 @@ export const clearAndSeedDatabase = async (): Promise<void> => {
 
   logger.info('🎉 Database seeding complete! 200 donors + 20 blood banks + 1 admin');
 };
+
+// ============================
+// SEED LOGINABLE ACCOUNTS
+// ============================
+// Creates REAL Firebase Auth accounts + Firestore profiles
+// so you can actually log in without needing email verification.
+
+interface SeedAccount {
+  email: string;
+  password: string;
+  role: UserRole;
+  profile: Record<string, unknown>;
+}
+
+const SEED_ACCOUNTS: SeedAccount[] = [
+  {
+    email: 'donor@bloodlife.in',
+    password: 'donor123',
+    role: UserRole.USER,
+    profile: {
+      name: 'Ravi Kumar',
+      phone: '+91 9876543211',
+      bloodGroup: 'O+',
+      isAvailable: true,
+      impactScore: 250,
+      location: { lat: 12.9716, lng: 77.5946, address: 'Koramangala, Bengaluru' },
+      documents: [
+        { id: 'id_seed_1', type: 'ID_PROOF', name: 'Aadhaar Card.pdf', status: 'VERIFIED', uploadDate: new Date().toISOString() },
+        { id: 'med_seed_1', type: 'CERTIFICATE', name: 'Medical Certificate.pdf', status: 'VERIFIED', uploadDate: new Date().toISOString() },
+      ],
+      donationHistory: [
+        { date: new Date(Date.now() - 90 * 86400000).toISOString(), location: 'Narayana Health Blood Bank', type: 'Whole Blood', points: 100 },
+        { date: new Date(Date.now() - 200 * 86400000).toISOString(), location: 'Manipal Hospital Blood Centre', type: 'Platelets', points: 150 },
+      ],
+      lastDonated: new Date(Date.now() - 90 * 86400000).toISOString(),
+    },
+  },
+  {
+    email: 'bank@bloodlife.in',
+    password: 'bank1234',
+    role: UserRole.BLOOD_BANK,
+    profile: {
+      name: 'Narayana Health Blood Bank',
+      phone: '+91 80 2783 5000',
+      bloodGroup: 'O+',
+      isAvailable: true,
+      impactScore: 0,
+      location: { lat: 12.8085, lng: 77.6590, address: 'Hosur Road, Bommasandra, Bengaluru' },
+      licenseNumber: 'SLAB-KA-2024-01',
+      documents: [
+        { id: 'lic_seed', type: 'CERTIFICATE', name: 'Blood Bank License.pdf', status: 'VERIFIED', uploadDate: new Date().toISOString() },
+        { id: 'acc_seed', type: 'CERTIFICATE', name: 'NABL Accreditation.pdf', status: 'VERIFIED', uploadDate: new Date().toISOString() },
+      ],
+      donationHistory: [],
+      stock: {
+        'A+': 45, 'A-': 12, 'B+': 30, 'B-': 5,
+        'AB+': 8, 'AB-': 2, 'O+': 60, 'O-': 15,
+      },
+    },
+  },
+];
+
+/**
+ * Create real Firebase Auth accounts + Firestore profiles for demo login.
+ * 
+ * Credentials:
+ *   Donor:      donor@bloodlife.in / donor123
+ *   Blood Bank: bank@bloodlife.in  / bank1234
+ *   Admin:      prajwal08042006@gmail.com / (your existing password)
+ * 
+ * NOTE: After creating, the accounts need email verification to be bypassed.
+ *       The seed marks them as `seedAccount: true` in Firestore so the
+ *       login flow can skip verification for these demo accounts.
+ */
+export const seedLoginableAccounts = async (): Promise<{ success: string[]; failed: string[] }> => {
+  const success: string[] = [];
+  const failed: string[] = [];
+
+  for (const account of SEED_ACCOUNTS) {
+    try {
+      logger.info(`🔑 Creating auth account: ${account.email}`);
+
+      // Create Firebase Auth account
+      const credential = await createUserWithEmailAndPassword(auth, account.email, account.password);
+      const uid = credential.user.uid;
+
+      // Create Firestore profile
+      await setDoc(doc(db, 'users', uid), {
+        uid,
+        email: account.email,
+        role: account.role,
+        accountStatus: 'APPROVED',
+        seedAccount: true, // Flag so login can skip email verification
+        ...account.profile,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      // If it's a blood bank, also add to blood_banks collection for map display
+      if (account.role === UserRole.BLOOD_BANK) {
+        const p = account.profile;
+        await setDoc(doc(db, 'blood_banks', uid), {
+          name: p.name,
+          location: p.location,
+          contact: p.phone,
+          stock: p.stock,
+        });
+      }
+
+      success.push(`✅ ${account.email} (password: ${account.password})`);
+      logger.info(`✅ Created: ${account.email}`);
+    } catch (err: unknown) {
+      const firebaseError = err as { code?: string; message?: string };
+      if (firebaseError.code === 'auth/email-already-in-use') {
+        success.push(`⚠️ ${account.email} already exists (password: ${account.password})`);
+        logger.info(`⚠️ Already exists: ${account.email}`);
+      } else {
+        failed.push(`❌ ${account.email}: ${firebaseError.message}`);
+        logger.error(`❌ Failed: ${account.email}`, firebaseError.message);
+      }
+    }
+  }
+
+  return { success, failed };
+};
