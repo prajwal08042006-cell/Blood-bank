@@ -1,18 +1,219 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { 
   Droplets, ShieldCheck, Lock, CheckCircle2, 
   History, MapPin, FileBadge, Share2, Trophy, 
   FileText, AlertCircle, Sparkles, ChevronRight, 
   ExternalLink, RefreshCw, Award, Medal, Zap, Download,
-  Verified, Eye
+  Verified, Eye, X
 } from 'lucide-react';
 import { useAuth } from '../App';
 import { CURRENT_USER } from '../constants';
+
+// --- Certificate Generator (Canvas-based PNG download) ---
+const generateCertificateImage = (
+  userName: string,
+  certTitle: string,
+  certDescription: string,
+  certId: string,
+  bloodGroup: string
+): HTMLCanvasElement => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1400;
+  canvas.height = 1000;
+  const ctx = canvas.getContext('2d')!;
+
+  // Background
+  const bgGrad = ctx.createLinearGradient(0, 0, 1400, 1000);
+  bgGrad.addColorStop(0, '#FFFDF7');
+  bgGrad.addColorStop(1, '#FFF8E7');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, 1400, 1000);
+
+  // Outer border
+  ctx.strokeStyle = '#C8A951';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(30, 30, 1340, 940);
+
+  // Inner border
+  ctx.strokeStyle = '#DAC06A';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(50, 50, 1300, 900);
+
+  // Corner ornaments
+  const corners = [[60, 60], [1330, 60], [60, 940], [1330, 940]];
+  corners.forEach(([x, y]) => {
+    ctx.beginPath();
+    ctx.arc(x, y, 18, 0, Math.PI * 2);
+    ctx.fillStyle = '#C8A951';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, 10, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFFDF7';
+    ctx.fill();
+  });
+
+  // Top emblem circle
+  ctx.beginPath();
+  ctx.arc(700, 140, 50, 0, Math.PI * 2);
+  const embGrad = ctx.createRadialGradient(700, 140, 10, 700, 140, 50);
+  embGrad.addColorStop(0, '#E53E3E');
+  embGrad.addColorStop(1, '#C53030');
+  ctx.fillStyle = embGrad;
+  ctx.fill();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = 'bold 28px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('❤', 700, 150);
+
+  // "GOVERNMENT OF KARNATAKA" subtitle
+  ctx.fillStyle = '#8B7A3D';
+  ctx.font = '600 13px "Helvetica Neue", sans-serif';
+  ctx.letterSpacing = '6px';
+  ctx.textAlign = 'center';
+  ctx.fillText('BLOODLIFE KARNATAKA  •  STATE HEALTH DEPARTMENT', 700, 220);
+
+  // Main title
+  ctx.fillStyle = '#1A202C';
+  ctx.font = 'bold 52px "Georgia", serif';
+  ctx.fillText('Certificate of Achievement', 700, 300);
+
+  // Decorative line
+  const lineGrad = ctx.createLinearGradient(350, 330, 1050, 330);
+  lineGrad.addColorStop(0, 'transparent');
+  lineGrad.addColorStop(0.3, '#C8A951');
+  lineGrad.addColorStop(0.7, '#C8A951');
+  lineGrad.addColorStop(1, 'transparent');
+  ctx.strokeStyle = lineGrad;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(350, 330);
+  ctx.lineTo(1050, 330);
+  ctx.stroke();
+
+  // "This is to certify that"
+  ctx.fillStyle = '#718096';
+  ctx.font = '20px "Georgia", serif';
+  ctx.fillText('This is to certify that', 700, 390);
+
+  // User name
+  ctx.fillStyle = '#1A202C';
+  ctx.font = 'bold 48px "Georgia", serif';
+  ctx.fillText(userName, 700, 460);
+
+  // Name underline
+  ctx.strokeStyle = '#C8A951';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(400, 478);
+  ctx.lineTo(1000, 478);
+  ctx.stroke();
+
+  // Blood group badge
+  ctx.fillStyle = '#FFF5F5';
+  ctx.beginPath();
+  ctx.roundRect(630, 495, 140, 40, 20);
+  ctx.fill();
+  ctx.strokeStyle = '#FEB2B2';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = '#E53E3E';
+  ctx.font = 'bold 16px "Helvetica Neue", sans-serif';
+  ctx.fillText(`Blood Group: ${bloodGroup}`, 700, 521);
+
+  // Achievement line
+  ctx.fillStyle = '#4A5568';
+  ctx.font = '20px "Georgia", serif';
+  ctx.fillText('has been awarded the distinction of', 700, 580);
+
+  // Cert title
+  ctx.fillStyle = '#C53030';
+  ctx.font = 'bold 40px "Georgia", serif';
+  ctx.fillText(`"${certTitle}"`, 700, 640);
+
+  // Description
+  ctx.fillStyle = '#718096';
+  ctx.font = '16px "Georgia", serif';
+  const maxWidth = 800;
+  const words = certDescription.split(' ');
+  let line = '';
+  let y = 690;
+  for (const word of words) {
+    const testLine = line + word + ' ';
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && line) {
+      ctx.fillText(line.trim(), 700, y);
+      line = word + ' ';
+      y += 24;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line.trim(), 700, y);
+
+  // Date and Ref
+  const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  ctx.fillStyle = '#A0AEC0';
+  ctx.font = '14px "Helvetica Neue", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Date: ${today}`, 120, 880);
+  ctx.textAlign = 'right';
+  ctx.fillText(`Ref: ${certId.toUpperCase()}`, 1280, 880);
+
+  // Signatures
+  ctx.textAlign = 'center';
+  ctx.strokeStyle = '#1A202C';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(200, 840); ctx.lineTo(450, 840); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(950, 840); ctx.lineTo(1200, 840); ctx.stroke();
+
+  ctx.fillStyle = '#4A5568';
+  ctx.font = '13px "Helvetica Neue", sans-serif';
+  ctx.fillText('Director, State Blood Services', 325, 860);
+  ctx.fillText('BloodLife AI Platform', 1075, 860);
+
+  // Watermark
+  ctx.save();
+  ctx.globalAlpha = 0.03;
+  ctx.font = 'bold 120px Georgia';
+  ctx.fillStyle = '#000';
+  ctx.translate(700, 500);
+  ctx.rotate(-0.3);
+  ctx.fillText('BLOODLIFE KARNATAKA', 0, 0);
+  ctx.restore();
+
+  return canvas;
+};
 
 const DonationHistory: React.FC = () => {
   const { user, updateUser } = useAuth();
   const activeUser = user || CURRENT_USER;
   const [isVerifying, setIsVerifying] = useState(false);
+  const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
+
+  const handleDownloadCert = useCallback((certTitle: string, certDescription: string, certId: string) => {
+    const canvas = generateCertificateImage(
+      activeUser.name,
+      certTitle,
+      certDescription,
+      certId,
+      activeUser.bloodGroup
+    );
+    const link = document.createElement('a');
+    link.download = `BloodLife_${certTitle.replace(/\s+/g, '_')}_Certificate.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }, [activeUser]);
+
+  const handlePreviewCert = useCallback((certTitle: string, certDescription: string, certId: string) => {
+    const canvas = generateCertificateImage(
+      activeUser.name,
+      certTitle,
+      certDescription,
+      certId,
+      activeUser.bloodGroup
+    );
+    setPreviewDataUrl(canvas.toDataURL('image/png'));
+  }, [activeUser]);
 
   // Simulation logic for document approval
   const simulateApproval = () => {
@@ -88,6 +289,7 @@ const DonationHistory: React.FC = () => {
   const hasVerifiedId = activeUser.documents.some(d => d.type === 'ID_PROOF' && d.status === 'VERIFIED');
 
   return (
+    <>
     <div className="p-8 md:p-14 max-w-7xl mx-auto space-y-20 animate-in fade-in duration-700">
       {/* Header Profile Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-10">
@@ -294,10 +496,10 @@ const DonationHistory: React.FC = () => {
                                <p className="text-[11px] font-bold text-slate-500 mt-1">Ref ID: CERT-{cert.id.split('-')[1]}</p>
                             </div>
                             <div className="flex gap-4">
-                               <button className="p-4 bg-white text-slate-400 rounded-3xl hover:text-blue-600 transition-all shadow-md border border-slate-100 active:scale-90" title="Preview Certificate">
+                               <button onClick={() => handlePreviewCert(cert.title, cert.description, cert.id)} className="p-4 bg-white text-slate-400 rounded-3xl hover:text-blue-600 transition-all shadow-md border border-slate-100 active:scale-90" title="Preview Certificate">
                                  <Eye size={22} />
                                </button>
-                               <button className="p-4 bg-slate-900 text-white rounded-3xl hover:bg-black transition-all shadow-xl active:scale-90" title="Download PDF">
+                               <button onClick={() => handleDownloadCert(cert.title, cert.description, cert.id)} className="p-4 bg-slate-900 text-white rounded-3xl hover:bg-black transition-all shadow-xl active:scale-90" title="Download PNG">
                                  <Download size={22} />
                                </button>
                             </div>
@@ -421,6 +623,36 @@ const DonationHistory: React.FC = () => {
         </div>
       </div>
     </div>
+
+      {/* Certificate Preview Modal */}
+      {previewDataUrl && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setPreviewDataUrl(null)}>
+          <div className="relative max-w-4xl w-full bg-white rounded-[2rem] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-slate-100">
+              <h3 className="text-lg font-black text-slate-800 tracking-tight">Certificate Preview</h3>
+              <div className="flex gap-3">
+                <a
+                  href={previewDataUrl}
+                  download="BloodLife_Certificate.png"
+                  className="px-5 py-2.5 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all flex items-center gap-2"
+                >
+                  <Download size={14} /> Download
+                </a>
+                <button
+                  onClick={() => setPreviewDataUrl(null)}
+                  className="p-2.5 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50">
+              <img src={previewDataUrl} alt="Certificate Preview" className="w-full h-auto rounded-xl shadow-inner" />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 
