@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+// Firebase Storage removed — files are stored as base64 in Firestore (works on Spark plan)
 import { logger } from './logger';
 
 const firebaseConfig = {
@@ -29,7 +29,7 @@ const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const storage = getStorage(app);
+// storage export removed — no longer using Firebase Storage
 
 // Set auth persistence explicitly to prevent stale token refresh issues.
 // This ensures Firebase uses localStorage and gracefully handles invalid cached tokens.
