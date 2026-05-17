@@ -49,11 +49,33 @@ export const signUp = async (email: string, password: string): Promise<User> => 
 export const logIn = async (email: string, password: string): Promise<User> => {
   try {
     const credential = await signInWithEmailAndPassword(auth, email, password);
-    // Skip email verification — this is a demo/academic project.
-    // Firebase Auth already validates credentials.
+
+    if (!credential.user.emailVerified) {
+      // Check if this is a seed/demo account that can skip email verification
+      const { getDoc, doc } = await import('firebase/firestore');
+      const { db } = await import('./firebase');
+      const profileDoc = await getDoc(doc(db, 'users', credential.user.uid));
+      const isSeedAccount = profileDoc.exists() && profileDoc.data()?.seedAccount === true;
+
+      if (!isSeedAccount) {
+        // Resend verification email
+        try {
+          await sendEmailVerification(credential.user);
+        } catch (verifyErr) {
+          logger.error('Re-send verification email failed (non-blocking):', verifyErr);
+        }
+        await firebaseSignOut(auth);
+        throw new Error('EMAIL_NOT_VERIFIED');
+      }
+    }
+
     return credential.user;
   } catch (error: unknown) {
     const firebaseError = error as { code?: string; message?: string };
+
+    if (firebaseError.message === 'EMAIL_NOT_VERIFIED') {
+      throw new Error('Please verify your email first. A new verification link has been sent to your inbox.');
+    }
     
     logger.error('Login failed:', firebaseError.message);
     throw new Error(
