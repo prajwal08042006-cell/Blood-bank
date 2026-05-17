@@ -207,65 +207,178 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserR
 
 // --- Inventory Manager ---
 const InventoryManager = () => {
-  const { user } = useAuth();
-  const initialStock = user?.stock || { 'A+': 0, 'A-': 0, 'B+': 0, 'B-': 0, 'AB+': 0, 'AB-': 0, 'O+': 0, 'O-': 0 };
-  const [stock, setStock] = useState<Record<BloodGroup, number>>(initialStock);
+  const { user, firebaseUser } = useAuth();
+  const defaultStock: Record<BloodGroup, number> = { 'A+': 0, 'A-': 0, 'B+': 0, 'B-': 0, 'AB+': 0, 'AB-': 0, 'O+': 0, 'O-': 0 };
+  const [stock, setStock] = useState<Record<BloodGroup, number>>(user?.stock || defaultStock);
+  const [editingGroup, setEditingGroup] = useState<BloodGroup | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Sync stock from user profile when it changes
   useEffect(() => {
-    const interval = setInterval(() => {
-      setStock((prev) => {
-        const next = { ...prev };
-        const keys = Object.keys(next) as Array<keyof typeof next>;
-        const randomKey = keys[Math.floor(Math.random() * keys.length)];
-        const change = Math.random() > 0.7 ? 1 : -1;
-        next[randomKey] = Math.max(0, next[randomKey] + change);
-        return next;
+    if (user?.stock) setStock(user.stock);
+  }, [user?.stock]);
+
+  const handleStockChange = (group: BloodGroup, value: number) => {
+    setStock((prev) => ({ ...prev, [group]: Math.max(0, value) }));
+  };
+
+  const handleSave = async () => {
+    if (!firebaseUser) return;
+    setIsSaving(true);
+    setSaveSuccess(false);
+    try {
+      // Update stock in 'users' collection (user profile)
+      const { doc: firestoreDoc, updateDoc, serverTimestamp: ts } = await import('firebase/firestore');
+      const { db: database } = await import('./lib/firebase');
+      await updateDoc(firestoreDoc(database, 'users', firebaseUser.uid), {
+        stock,
+        updatedAt: ts(),
       });
-    }, 8000);
-    return () => clearInterval(interval);
-  }, []);
+      // Also update blood_banks collection for map display
+      try {
+        await updateDoc(firestoreDoc(database, 'blood_banks', firebaseUser.uid), {
+          stock,
+          updatedAt: ts(),
+        });
+      } catch {
+        // blood_banks doc might not exist, that's ok
+      }
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      logger.error('Failed to save inventory:', err);
+      alert('Failed to save inventory. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const totalUnits = Object.values(stock).reduce((a: number, b: number) => a + b, 0);
+  const lowStockGroups = Object.entries(stock).filter(([, v]) => (v as number) < 10).length;
 
   return (
-    <div className="p-8 md:p-14 bg-slate-50 min-h-full max-w-7xl mx-auto space-y-12">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
+    <div className="p-8 md:p-14 bg-slate-50 min-h-full max-w-7xl mx-auto space-y-10">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h1 className="text-5xl font-black text-slate-800 tracking-tighter">Inventory Control</h1>
           <p className="text-slate-400 font-bold mt-2 flex items-center gap-2">
             <MapPin size={18} className="text-blue-600" /> {user?.name || "Blood Bank"}
           </p>
         </div>
-        <div className="flex gap-4 w-full md:w-auto">
+        <div className="flex gap-3 w-full md:w-auto">
           <button
             onClick={() => {
               setIsRefreshing(true);
-              setTimeout(() => setIsRefreshing(false), 1000);
+              if (user?.stock) setStock(user.stock);
+              setTimeout(() => setIsRefreshing(false), 600);
             }}
-            className="flex-1 md:flex-none bg-white border-2 border-slate-200 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-slate-600 flex items-center justify-center gap-3 hover:bg-slate-50 active:scale-95 transition-all"
+            className="flex-1 md:flex-none bg-white border-2 border-slate-200 px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-slate-600 flex items-center justify-center gap-2 hover:bg-slate-50 active:scale-95 transition-all"
           >
-            <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} /> SYNC SYSTEM
+            <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} /> RESET
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className={`flex-1 md:flex-none px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg ${
+              saveSuccess
+                ? 'bg-emerald-500 text-white shadow-emerald-200'
+                : 'bg-blue-600 text-white shadow-blue-200 hover:bg-blue-700'
+            } disabled:opacity-60`}
+          >
+            {isSaving ? (
+              <><RefreshCw size={16} className="animate-spin" /> SAVING...</>
+            ) : saveSuccess ? (
+              <><Package size={16} /> SAVED ✓</>
+            ) : (
+              <><Package size={16} /> SAVE STOCK</>
+            )}
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        <div className="lg:col-span-8 space-y-10">
-          <div className="bg-white p-12 rounded-[3rem] border border-slate-100 shadow-2xl">
-            <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3 tracking-tight mb-10">
-              <Package className="text-blue-600" /> Current Stock Levels
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              {Object.entries(stock).map(([group, units]) => {
-                const count = units as number;
-                return (
-                  <div key={group} className={`p-8 rounded-[2rem] border-2 transition-all ${count < 10 ? 'bg-rose-50 border-rose-200' : 'bg-slate-50/30 border-slate-100'}`}>
-                    <span className="text-xs font-black text-slate-400 mb-1 block tracking-[0.2em]">{group}</span>
-                    <span className={`text-4xl font-black tracking-tighter block ${count < 10 ? 'text-rose-600' : 'text-slate-800'}`}>{count}</span>
+      {/* Stats Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-slate-100">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Units</p>
+          <p className="text-3xl font-black text-slate-800 tracking-tighter mt-1">{totalUnits}</p>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-slate-100">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Blood Groups</p>
+          <p className="text-3xl font-black text-slate-800 tracking-tighter mt-1">8</p>
+        </div>
+        <div className={`p-5 rounded-2xl border ${lowStockGroups > 0 ? 'bg-rose-50 border-rose-200' : 'bg-emerald-50 border-emerald-200'}`}>
+          <p className={`text-[10px] font-black uppercase tracking-widest ${lowStockGroups > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>Low Stock Alerts</p>
+          <p className={`text-3xl font-black tracking-tighter mt-1 ${lowStockGroups > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{lowStockGroups}</p>
+        </div>
+      </div>
+
+      {/* Editable Stock Grid */}
+      <div className="bg-white p-8 md:p-12 rounded-[3rem] border border-slate-100 shadow-2xl">
+        <div className="flex items-center justify-between mb-8">
+          <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3 tracking-tight">
+            <Package className="text-blue-600" /> Stock Levels
+          </h3>
+          <p className="text-xs font-bold text-slate-400">Click any value to edit</p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+          {(Object.entries(stock) as [BloodGroup, number][]).map(([group, units]) => {
+            const isLow = units < 10;
+            const isEditing = editingGroup === group;
+
+            return (
+              <div
+                key={group}
+                onClick={() => setEditingGroup(group)}
+                className={`relative p-6 rounded-[2rem] border-2 transition-all cursor-pointer group ${
+                  isEditing
+                    ? 'bg-blue-50 border-blue-300 shadow-lg shadow-blue-100 ring-2 ring-blue-200'
+                    : isLow
+                    ? 'bg-rose-50 border-rose-200 hover:border-rose-300 hover:shadow-md'
+                    : 'bg-slate-50/30 border-slate-100 hover:border-slate-200 hover:shadow-md'
+                }`}
+              >
+                <span className="text-xs font-black text-slate-400 mb-2 block tracking-[0.2em]">{group}</span>
+
+                {isEditing ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleStockChange(group, units - 1); }}
+                      className="w-10 h-10 bg-rose-100 text-rose-600 rounded-xl font-black text-lg hover:bg-rose-200 active:scale-90 transition-all flex items-center justify-center"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      value={units}
+                      onChange={(e) => handleStockChange(group, parseInt(e.target.value) || 0)}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={() => setEditingGroup(null)}
+                      autoFocus
+                      min={0}
+                      className="w-16 text-center text-3xl font-black tracking-tighter bg-white border-2 border-blue-200 rounded-xl py-1 focus:outline-none focus:border-blue-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleStockChange(group, units + 1); }}
+                      className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl font-black text-lg hover:bg-emerald-200 active:scale-90 transition-all flex items-center justify-center"
+                    >
+                      +
+                    </button>
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                ) : (
+                  <span className={`text-4xl font-black tracking-tighter block ${isLow ? 'text-rose-600' : 'text-slate-800'}`}>
+                    {units}
+                  </span>
+                )}
+
+                {isLow && !isEditing && (
+                  <span className="absolute top-3 right-3 w-3 h-3 bg-rose-500 rounded-full animate-pulse" />
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
