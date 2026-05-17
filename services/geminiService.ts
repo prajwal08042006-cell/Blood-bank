@@ -118,25 +118,66 @@ export async function findNearbyHospitals(location: Location) {
 /**
  * Chatbot implementation for user queries.
  */
-export async function getChatResponse(message: string, history: { role: string, parts: { text: string }[] }[]) {
+export async function getChatResponse(message: string, _history: { role: string, parts: { text: string }[] }[]) {
   if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
     await new Promise(r => setTimeout(r, 800)); // Simulate delay
-    return mockChatResponses[Math.floor(Math.random() * mockChatResponses.length)];
+    return getSmartMockResponse(message);
   }
 
   try {
-    const chat = ai.chats.create({
-      model: 'gemini-1.5-flash',
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: message,
       config: {
-        systemInstruction: 'You are BloodLife AI assistant. You help users find blood donors, explain blood donation eligibility, and provide emergency guidance. Be empathetic, professional, and clear.'
-      },
-      history: history
+        systemInstruction: `You are BloodLife AI assistant for the BloodLife Karnataka blood donation platform. 
+You help users with:
+- Blood donation eligibility (age 18-65, weight ≥45kg, 90-day cooldown between donations)
+- Finding nearby blood banks and hospitals
+- Understanding blood group compatibility
+- Emergency blood requests
+- Donation history and impact scores
+Be empathetic, professional, clear, and concise. Keep responses under 3 sentences unless detailed info is needed.`,
+      }
     });
 
-    const response = await chat.sendMessage({ message });
-    return response.text;
+    return response.text || "I'm sorry, I couldn't process that request.";
   } catch (error) {
     logger.error("Chat Error", error);
-    return "I'm having trouble connecting to the network right now. Please check your connection or try again later.";
+    // Fall back to smart mock instead of showing an error
+    return getSmartMockResponse(message);
   }
+}
+
+/**
+ * Smart mock responses based on user message content.
+ */
+function getSmartMockResponse(message: string): string {
+  const msg = message.toLowerCase();
+
+  if (msg.includes('eligib') || msg.includes('can i donate') || msg.includes('who can')) {
+    return "To donate blood, you must be between 18-65 years old, weigh at least 45kg, and have waited at least 90 days since your last donation. You should be in good health and free from infections.";
+  }
+  if (msg.includes('blood group') || msg.includes('blood type') || msg.includes('compatible')) {
+    return "O- is the universal donor (can give to anyone), while AB+ is the universal recipient. Your blood group determines who you can donate to and receive from. Check the Live Map to see demand by blood group!";
+  }
+  if (msg.includes('near') || msg.includes('hospital') || msg.includes('bank') || msg.includes('where')) {
+    return "You can find nearby blood banks and hospitals on our Live Map! Click 'Live Map' in the sidebar to see all registered facilities near your location with real-time stock levels.";
+  }
+  if (msg.includes('emergency') || msg.includes('urgent') || msg.includes('need blood')) {
+    return "For urgent blood needs, use the Emergency Request feature in the sidebar. It alerts nearby donors matching the required blood group and connects you with available blood banks instantly.";
+  }
+  if (msg.includes('history') || msg.includes('impact') || msg.includes('score') || msg.includes('certificate')) {
+    return "Your donation history and impact score are tracked in 'My Impact'. Each donation earns points, and you can unlock digital certificates as you reach milestones. Keep donating to level up!";
+  }
+  if (msg.includes('how') && (msg.includes('work') || msg.includes('donate'))) {
+    return "BloodLife connects donors with blood banks across Karnataka. Register, verify your identity, then respond to blood requests or visit your nearest blood bank. Every donation saves up to 3 lives!";
+  }
+  if (msg.includes('hello') || msg.includes('hi') || msg.includes('hey')) {
+    return "Hello! 👋 I'm your BloodLife assistant. I can help you with donation eligibility, finding nearby blood banks, understanding blood compatibility, or managing emergency requests. What would you like to know?";
+  }
+  if (msg.includes('thank')) {
+    return "You're welcome! Remember, every blood donation can save up to 3 lives. Is there anything else I can help you with?";
+  }
+
+  return "I can help you with blood donation eligibility, finding nearby blood banks, understanding blood group compatibility, and managing emergency requests. What would you like to know more about?";
 }
